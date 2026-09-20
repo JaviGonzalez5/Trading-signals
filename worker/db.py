@@ -38,3 +38,30 @@ def insert_signal(client: Client, row: dict) -> dict:
 
 def mark_notified(client: Client, signal_id: str, when_iso: str) -> None:
     client.table("signals").update({"telegram_notified_at": when_iso}).eq("id", signal_id).execute()
+
+
+def get_active_signals(client: Client) -> list[dict]:
+    resp = client.table("signals").select("*").eq("status", "ACTIVE").execute()
+    return resp.data or []
+
+
+def get_asset(client: Client, asset_id: str) -> dict | None:
+    resp = client.table("assets").select("*").eq("id", asset_id).limit(1).execute()
+    data = resp.data or []
+    return data[0] if data else None
+
+
+def close_signal(
+    client: Client,
+    signal_id: str,
+    status: str,
+    exit_price: float,
+    r_multiple: float,
+    closed_at_iso: str,
+) -> None:
+    client.table("signals").update({
+        "status": status,
+        "exit_price": exit_price,
+        "r_multiple": r_multiple,
+        "closed_at": closed_at_iso,
+    }).eq("id", signal_id).execute()

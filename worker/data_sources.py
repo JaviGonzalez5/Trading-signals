@@ -16,16 +16,16 @@ KRAKEN_OHLC_URL = "https://api.kraken.com/0/public/OHLC"
 KRAKEN_INTERVAL_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440}
 
 
-def fetch_kraken_klines(pair: str, interval: str = "1h") -> pd.DataFrame:
+def fetch_kraken_klines(pair: str, interval: str = "1h", since: int | None = None) -> pd.DataFrame:
     minutes = KRAKEN_INTERVAL_MINUTES.get(interval)
     if minutes is None:
         raise ValueError(f"Kraken no soporta el timeframe '{interval}'")
 
-    resp = requests.get(
-        KRAKEN_OHLC_URL,
-        params={"pair": pair, "interval": minutes},
-        timeout=15,
-    )
+    params = {"pair": pair, "interval": minutes}
+    if since is not None:
+        params["since"] = since  # unix seconds; Kraken devuelve velas posteriores a esto
+
+    resp = requests.get(KRAKEN_OHLC_URL, params=params, timeout=15)
     resp.raise_for_status()
     body = resp.json()
     if body.get("error"):
@@ -107,3 +107,18 @@ def fetch_candles(asset: dict) -> pd.DataFrame:
         f"Fuente de datos '{source}' no soportada todavía "
         f"(activo {asset['symbol']}) — pendiente de decidir (p.ej. Interactive Brokers)."
     )
+
+
+def fetch_candles_since(asset: dict, since_ts) -> pd.DataFrame:
+    """Velas posteriores a `since_ts` (datetime) — para revisar si una señal
+    pasada ya tocó TP/SL. Solo soportado para Kraken por ahora (única fuente
+    en producción)."""
+    source = asset["data_source"]
+    ticker = asset.get("source_ticker") or asset["symbol"]
+    timeframe = asset.get("timeframe") or "1h"
+    since_unix = int(pd.Timestamp(since_ts).timestamp())
+
+    if source == "kraken":
+        return fetch_kraken_klines(ticker, interval=timeframe, since=since_unix)
+
+    raise ValueError(f"fetch_candles_since no soportado todavía para la fuente '{source}'")
