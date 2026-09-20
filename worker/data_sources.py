@@ -11,6 +11,43 @@ import yfinance as yf
 BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
 BINANCE_KLINES_LIMIT = 500  # suficiente para EMA200 + margen
 
+KRAKEN_OHLC_URL = "https://api.kraken.com/0/public/OHLC"
+# minutos por vela que acepta Kraken: 1,5,15,30,60,240,1440,10080,21600
+KRAKEN_INTERVAL_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440}
+
+
+def fetch_kraken_klines(pair: str, interval: str = "1h") -> pd.DataFrame:
+    minutes = KRAKEN_INTERVAL_MINUTES.get(interval)
+    if minutes is None:
+        raise ValueError(f"Kraken no soporta el timeframe '{interval}'")
+
+    resp = requests.get(
+        KRAKEN_OHLC_URL,
+        params={"pair": pair, "interval": minutes},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    if body.get("error"):
+        raise RuntimeError(f"Kraken devolvió error para {pair}: {body['error']}")
+
+    result = body.get("result", {})
+    # La clave del par en la respuesta no siempre coincide con el pair pedido
+    # (Kraken normaliza nombres, p.ej. XBTUSD -> XXBTZUSD) — cogemos la única
+    # clave que no sea "last".
+    rows = next((v for k, v in result.items() if k != "last"), None)
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows, columns=[
+        "time", "Open", "High", "Low", "Close", "vwap", "Volume", "count",
+    ])
+    df[["Open", "High", "Low", "Close", "Volume"]] = df[
+        ["Open", "High", "Low", "Close", "Volume"]
+    ].astype(float)
+    df.index = pd.to_datetime(df["time"], unit="s", utc=True)
+    return df[["Open", "High", "Low", "Close", "Volume"]]
+
 
 def fetch_binance_klines(ticker: str, interval: str = "1h") -> pd.DataFrame:
     resp = requests.get(
@@ -52,9 +89,18 @@ def fetch_candles(asset: dict) -> pd.DataFrame:
     ticker = asset.get("source_ticker") or asset["symbol"]
     timeframe = asset.get("timeframe") or "1h"
 
+    if source == "kraken":
+        return fetch_kraken_klines(ticker, interval=timeframe)
     if source == "binance":
+        # Binance devuelve 451 desde IPs de proveedores cloud (Railway
+        # incluido) — se deja el código por si algún día hace falta desde
+        # otro entorno, pero ningún activo activo lo usa ahora mismo.
         return fetch_binance_klines(ticker, interval=timeframe)
     if source == "yfinance":
+        # Observado colgándose sin error desde Railway (mismo bloqueo
+        # anti-scraping de Yahoo que en el sandbox de desarrollo) — sin
+        # timeout fiable disponible en yf.download(). No usar en producción
+        # hasta resolverlo; sustituido por Kraken/IB según el activo.
         return fetch_yfinance_klines(ticker, interval=timeframe)
 
     raise ValueError(
