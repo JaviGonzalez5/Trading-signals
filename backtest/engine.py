@@ -14,6 +14,7 @@ def simulate_trades(
     df: pd.DataFrame,
     max_bars_forward: int = 200,
     trailing_exit_lookback: int | None = None,
+    partial_tp_at: float | None = None,
 ) -> pd.DataFrame:
     """
     Para cada fila con señal, mira hacia adelante en el propio DataFrame
@@ -28,6 +29,14 @@ def simulate_trades(
     nunca puede ser peor que el SL inicial (se usa el más favorable de los
     dos, ratchet solo a favor) — sigue siendo, como mínimo, tan protector
     como el SL de siempre.
+
+    partial_tp_at (opcional, solo tiene efecto junto a trailing_exit_lookback):
+    fracción de la posición (0-1) que se cierra al llegar al TP original —
+    el resto sigue con la salida por canal. Con esto, tocar el TP sigue
+    contando como "ganada" (sube el win rate real, no solo el retorno) y a
+    la vez se conserva parte de la ganancia extra de dejar correr el resto.
+    El SL del resto NO se mueve a breakeven (decisión explícita: un solo
+    pequeño retroceso tras el parcial no debe cerrar solo por eso).
     """
     trades = []
     signal_rows = df[df["signal"] != 0]
@@ -46,8 +55,10 @@ def simulate_trades(
         sl = row["sl"]
         tp = row["tp"]
 
+        legs: list[tuple[float, float]] = []  # (fracción cerrada, precio de salida)
+        remaining = 1.0
+        partial_done = False
         outcome = None
-        exit_price = None
         exit_idx = None
         bars_held = 0
 
@@ -60,15 +71,26 @@ def simulate_trades(
                 if direction == 1:
                     channel_floor = trail_low.iloc[j]
                     exit_level = sl if pd.isna(channel_floor) else max(sl, channel_floor)
-                    hit_exit = future["Low"] <= exit_level
+                    hit_trail = future["Low"] <= exit_level
+                    hit_partial = (not partial_done) and (partial_tp_at is not None) and (future["High"] >= tp)
                 else:
                     channel_ceiling = trail_high.iloc[j]
                     exit_level = sl if pd.isna(channel_ceiling) else min(sl, channel_ceiling)
-                    hit_exit = future["High"] >= exit_level
+                    hit_trail = future["High"] >= exit_level
+                    hit_partial = (not partial_done) and (partial_tp_at is not None) and (future["Low"] <= tp)
 
-                if hit_exit:
+                if hit_trail and hit_partial:
+                    hit_partial = False  # misma vela: prudencia, no se cobra el parcial
+
+                if hit_partial:
+                    legs.append((partial_tp_at, tp))
+                    remaining -= partial_tp_at
+                    partial_done = True
+                    continue
+
+                if hit_trail:
+                    legs.append((remaining, exit_level))
                     outcome = "SL" if exit_level == sl else "TRAIL"
-                    exit_price = exit_level
                     exit_idx = df.index[j]
                     break
                 continue
@@ -82,29 +104,34 @@ def simulate_trades(
 
             # Si toca ambos en la misma vela, asumimos el peor caso (SL) por prudencia
             if hit_sl and hit_tp:
+                legs = [(1.0, sl)]
                 outcome = "SL"
-                exit_price = sl
                 exit_idx = df.index[j]
                 break
             elif hit_sl:
+                legs = [(1.0, sl)]
                 outcome = "SL"
-                exit_price = sl
                 exit_idx = df.index[j]
                 break
             elif hit_tp:
+                legs = [(1.0, tp)]
                 outcome = "TP"
-                exit_price = tp
                 exit_idx = df.index[j]
                 break
 
         if outcome is None:
-            # No tocó ni SL ni TP en la ventana → cerramos al precio final de la ventana (timeout)
+            # No se resolvió en la ventana → cerramos el resto al precio final (timeout)
             outcome = "TIMEOUT"
             last_pos = min(pos + max_bars_forward, len(df) - 1)
-            exit_price = df.iloc[last_pos]["Close"]
+            legs.append((remaining, df.iloc[last_pos]["Close"]))
             exit_idx = df.index[last_pos]
 
-        r_multiple = (exit_price - entry) / (entry - sl) if direction == 1 else (entry - exit_price) / (sl - entry)
+        sl_distance = (entry - sl) if direction == 1 else (sl - entry)
+        r_multiple = sum(
+            frac * ((price - entry) / sl_distance if direction == 1 else (entry - price) / sl_distance)
+            for frac, price in legs
+        )
+        exit_price = legs[-1][1]
 
         trades.append({
             "entry_date": idx,
@@ -117,6 +144,7 @@ def simulate_trades(
             "outcome": outcome,
             "bars_held": bars_held,
             "r_multiple": round(r_multiple, 3),
+            "partial_taken": len(legs) > 1,
         })
 
     return pd.DataFrame(trades)
@@ -199,7 +227,7 @@ def summarize(trades: pd.DataFrame, risk_pct: float = 1.0) -> dict:
     drawdown = equity_curve - running_max
     max_drawdown_pct = drawdown.min()
 
-    return {
+    result = {
         "num_trades": len(trades),
         "wins": len(wins),
         "losses": len(losses),
@@ -210,3 +238,15 @@ def summarize(trades: pd.DataFrame, risk_pct: float = 1.0) -> dict:
         "estimated_return_pct": round(total_r * risk_pct, 2),
         "max_drawdown_pct": round(max_drawdown_pct, 2),
     }
+
+    if "partial_taken" in trades.columns and trades["partial_taken"].any():
+        # Con cierre parcial en el TP original, una operación que luego
+        # pierde en el resto puede seguir siendo neta positiva o negativa —
+        # pero el operador SÍ vio un beneficio real cerrado en el camino.
+        # win_rate_pct ya cuenta bien el resultado neto; esto es la métrica
+        # "se sintió como una ganancia", más relevante para la sensación de
+        # operar en vivo que para la rentabilidad.
+        felt_win = non_timeout[(non_timeout["r_multiple"] > 0) | non_timeout["partial_taken"]]
+        result["felt_win_rate_pct"] = round(len(felt_win) / len(trades) * 100, 2)
+
+    return result
