@@ -10,13 +10,33 @@ import pandas as pd
 from strategy.risk import COOLDOWN_HOURS, LOSS_STREAK_THRESHOLD
 
 
-def simulate_trades(df: pd.DataFrame, max_bars_forward: int = 200) -> pd.DataFrame:
+def simulate_trades(
+    df: pd.DataFrame,
+    max_bars_forward: int = 200,
+    trailing_exit_lookback: int | None = None,
+) -> pd.DataFrame:
     """
     Para cada fila con señal, mira hacia adelante en el propio DataFrame
     hasta que el precio toca el SL o el TP. Devuelve un DataFrame de operaciones.
+
+    trailing_exit_lookback (opcional): en vez de un TP fijo (ATR x
+    TP_ATR_MULT), usa una salida de canal Donchian estilo Turtle Trading —
+    el sistema de breakout+ATR más estudiado y documentado (Richard Dennis,
+    años 80): deja correr al ganador y sale cuando el precio rompe el
+    mínimo/máximo de las últimas N velas EN CONTRA de la posición, en vez
+    de cortar en un múltiplo de ATR fijo. El nivel de salida por canal
+    nunca puede ser peor que el SL inicial (se usa el más favorable de los
+    dos, ratchet solo a favor) — sigue siendo, como mínimo, tan protector
+    como el SL de siempre.
     """
     trades = []
     signal_rows = df[df["signal"] != 0]
+
+    trail_low = None
+    trail_high = None
+    if trailing_exit_lookback is not None:
+        trail_low = df["Low"].shift(1).rolling(trailing_exit_lookback).min()
+        trail_high = df["High"].shift(1).rolling(trailing_exit_lookback).max()
 
     for idx in signal_rows.index:
         pos = df.index.get_loc(idx)
@@ -35,6 +55,23 @@ def simulate_trades(df: pd.DataFrame, max_bars_forward: int = 200) -> pd.DataFra
         for j in range(pos + 1, min(pos + 1 + max_bars_forward, len(df))):
             future = df.iloc[j]
             bars_held += 1
+
+            if trailing_exit_lookback is not None:
+                if direction == 1:
+                    channel_floor = trail_low.iloc[j]
+                    exit_level = sl if pd.isna(channel_floor) else max(sl, channel_floor)
+                    hit_exit = future["Low"] <= exit_level
+                else:
+                    channel_ceiling = trail_high.iloc[j]
+                    exit_level = sl if pd.isna(channel_ceiling) else min(sl, channel_ceiling)
+                    hit_exit = future["High"] >= exit_level
+
+                if hit_exit:
+                    outcome = "SL" if exit_level == sl else "TRAIL"
+                    exit_price = exit_level
+                    exit_idx = df.index[j]
+                    break
+                continue
 
             if direction == 1:  # largo
                 hit_sl = future["Low"] <= sl
@@ -143,8 +180,13 @@ def summarize(trades: pd.DataFrame, risk_pct: float = 1.0) -> dict:
     if trades.empty:
         return {"num_trades": 0}
 
-    wins = trades[trades["outcome"] == "TP"]
-    losses = trades[trades["outcome"] == "SL"]
+    # Gana/pierde por signo del r_multiple, no por el nombre del outcome —
+    # con salida por canal Donchian (TRAIL) el resultado puede ser positivo
+    # o negativo según dónde haya quedado el canal, a diferencia de TP/SL
+    # que por construcción siempre son favorable/desfavorable.
+    non_timeout = trades[trades["outcome"] != "TIMEOUT"]
+    wins = non_timeout[non_timeout["r_multiple"] > 0]
+    losses = non_timeout[non_timeout["r_multiple"] <= 0]
     timeouts = trades[trades["outcome"] == "TIMEOUT"]
 
     win_rate = len(wins) / len(trades) * 100

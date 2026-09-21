@@ -53,6 +53,22 @@ HTF_EMA_SLOW = 200
 ADX_PERIOD = 14
 
 
+def gold_market_open(index: pd.DatetimeIndex) -> pd.Series:
+    """True cuando el mercado REAL del oro está abierto (ver
+    generate_signals, parámetro exclude_gold_market_closed). El oro cierra
+    a diario 22:00-23:00 UTC y todo el fin de semana, de viernes 22:00 UTC
+    a domingo 22:00 UTC. El proxy PAXG que usamos como XAUUSD cotiza 24/7
+    igualmente — en esas horas se mueve sin que el mercado real del oro
+    esté detrás, movimiento más propenso a ser ruido que tendencia real."""
+    hour = index.hour
+    weekday = index.dayofweek  # lunes=0 ... domingo=6
+    closed = (hour == 22)
+    closed = closed | ((weekday == 4) & (hour >= 22))  # viernes desde las 22h
+    closed = closed | (weekday == 5)                    # sábado entero
+    closed = closed | ((weekday == 6) & (hour < 22))     # domingo hasta las 22h
+    return pd.Series(~closed, index=index)
+
+
 def compute_htf_trend(htf_df: pd.DataFrame) -> pd.Series:
     """+1 alcista / -1 bajista / 0 sin datos suficientes, indexado por fecha
     de vela del marco superior (p.ej. 4h)."""
@@ -117,6 +133,7 @@ def generate_signals(
     exclude_hours: set[int] | None = None,
     allow_long: bool = True,
     allow_short: bool = True,
+    exclude_gold_market_closed: bool = False,
 ) -> pd.DataFrame:
     """
     Genera columna 'signal': 1 = compra, -1 = venta, 0 = sin señal.
@@ -145,6 +162,10 @@ def generate_signals(
     allow_long / allow_short (opcional, default True): permite desactivar
     un lado completo de la estrategia para un activo donde ese lado no
     tiene edge real.
+
+    exclude_gold_market_closed (opcional, default False): excluye
+    entradas en las horas en que el mercado REAL del oro está cerrado
+    (ver gold_market_open) — solo tiene sentido para el proxy PAXG.
     """
     df = compute_indicators(df)
 
@@ -197,6 +218,11 @@ def generate_signals(
         long_signal = long_signal & False
     if not allow_short:
         short_signal = short_signal & False
+
+    if exclude_gold_market_closed:
+        market_open = gold_market_open(df.index)
+        long_signal = long_signal & market_open
+        short_signal = short_signal & market_open
 
     df["signal"] = 0
     df.loc[long_signal, "signal"] = 1
