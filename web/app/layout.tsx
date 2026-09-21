@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { IconTrendingUp } from "@/components/icons";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -16,8 +17,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="site-header">
           <div className="header-inner">
             <a href="/" className="brand">
-              <span className="brand-mark" />
+              <span className="brand-mark">
+                <IconTrendingUp size={15} strokeWidth={2.4} />
+              </span>
               Señales Trading
+              <span className="brand-status">
+                <span className="live-dot" />
+                24/7
+              </span>
             </a>
             <nav className="header-nav">
               <a href="/" className="nav-link">

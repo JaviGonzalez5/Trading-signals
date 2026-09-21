@@ -9,8 +9,12 @@ datos históricos de verdad.
 Script de un solo uso — no forma parte del sistema en marcha.
 """
 
+import os
+import sys
 import time
 from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 

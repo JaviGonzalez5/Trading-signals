@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import { createChart, ColorType, type IChartApi, type ISeriesApi } from "lightweight-charts";
 import type { Candle } from "@/lib/kraken";
+import { CHART_COLORS } from "@/lib/chart-theme";
+import { IconInbox } from "@/components/icons";
 
 export type SignalLevel = {
   id: string;
@@ -21,20 +23,21 @@ export default function PriceChart({ candles, signals }: { candles: Candle[]; si
     if (!containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
-      layout: { background: { type: ColorType.Solid, color: "#131519" }, textColor: "#c3c7cd" },
-      grid: { vertLines: { color: "#1a1c21" }, horzLines: { color: "#1a1c21" } },
+      layout: { background: { type: ColorType.Solid, color: CHART_COLORS.bg }, textColor: CHART_COLORS.text },
+      grid: { vertLines: { color: CHART_COLORS.grid }, horzLines: { color: CHART_COLORS.grid } },
       width: containerRef.current.clientWidth,
       height: 360,
       timeScale: { timeVisible: true, secondsVisible: false },
+      crosshair: { vertLine: { color: "#3a3f4c", labelBackgroundColor: "#1a1d24" }, horzLine: { color: "#3a3f4c", labelBackgroundColor: "#1a1d24" } },
     });
     chartRef.current = chart;
 
     const series = chart.addCandlestickSeries({
-      upColor: "#3ecf8e",
-      downColor: "#f2555a",
+      upColor: CHART_COLORS.green,
+      downColor: CHART_COLORS.red,
       borderVisible: false,
-      wickUpColor: "#3ecf8e",
-      wickDownColor: "#f2555a",
+      wickUpColor: CHART_COLORS.green,
+      wickDownColor: CHART_COLORS.red,
     });
     seriesRef.current = series;
 
@@ -65,21 +68,21 @@ export default function PriceChart({ candles, signals }: { candles: Candle[]; si
     for (const s of signals) {
       seriesRef.current.createPriceLine({
         price: s.entry_price,
-        color: "#5b9cf6",
+        color: CHART_COLORS.blue,
         lineWidth: 1,
         lineStyle: 2,
         title: `Entrada ${s.direction}`,
       });
       seriesRef.current.createPriceLine({
         price: s.stop_loss,
-        color: "#f2555a",
+        color: CHART_COLORS.red,
         lineWidth: 1,
         lineStyle: 2,
         title: "SL",
       });
       seriesRef.current.createPriceLine({
         price: s.take_profit,
-        color: "#3ecf8e",
+        color: CHART_COLORS.green,
         lineWidth: 1,
         lineStyle: 2,
         title: "TP",
@@ -90,7 +93,12 @@ export default function PriceChart({ candles, signals }: { candles: Candle[]; si
   }, [candles, signals]);
 
   if (candles.length === 0) {
-    return <p className="empty-state">Sin datos de precio disponibles ahora mismo.</p>;
+    return (
+      <p className="empty-state">
+        <IconInbox className="icon-empty" size={22} />
+        Sin datos de precio disponibles ahora mismo.
+      </p>
+    );
   }
 
   return (

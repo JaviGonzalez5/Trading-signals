@@ -1,5 +1,15 @@
 import { getAllResolvedSignals, getDailyReviews } from "@/lib/data";
 import { buildSuggestions } from "@/lib/suggestions";
+import {
+  IconChevronLeft,
+  IconCheckCircle,
+  IconFileText,
+  IconInbox,
+  IconLightbulb,
+  IconTrendingDown,
+  IconTrendingUp,
+  IconXCircle,
+} from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +43,8 @@ export default async function TradesPage() {
   return (
     <>
       <a className="back-link" href="/">
-        ← Volver
+        <IconChevronLeft size={15} />
+        Volver
       </a>
       <div className="asset-header">
         <h1>Diario de trades</h1>
@@ -47,15 +58,24 @@ export default async function TradesPage() {
         <h2>Revisión narrada</h2>
         {reviews.length === 0 ? (
           <p className="empty-state">
+            <IconFileText className="icon-empty" size={22} />
             Todavía no hay ninguna revisión narrada — se genera automáticamente el día que se resuelva al menos
             una señal (requiere <code>ANTHROPIC_API_KEY</code> configurada en Railway).
           </p>
         ) : (
           <div className="reviews-list">
             {reviews.map((r) => (
-              <div key={r.id} className="review-card">
-                <div className="review-date">{fmtDay(r.review_date)}</div>
-                <p className="review-narrative">{r.narrative}</p>
+              <div key={r.id} className="card">
+                <div className="card-header">
+                  <span className="icon-chip accent">
+                    <IconFileText size={15} />
+                  </span>
+                  <div className="card-title-group">
+                    <span className="card-title">Revisión del día</span>
+                    <span className="card-meta">{fmtDay(r.review_date)}</span>
+                  </div>
+                </div>
+                <p className="card-body">{r.narrative}</p>
               </div>
             ))}
           </div>
@@ -66,21 +86,30 @@ export default async function TradesPage() {
         <h2>Sugerencias</h2>
         {signals.length < 15 ? (
           <p className="empty-state">
+            <IconLightbulb className="icon-empty" size={22} />
             Hacen falta al menos 15 señales resueltas para que un patrón no sea ruido estadístico. Llevas{" "}
             {signals.length}. Sigue dejando correr el sistema.
           </p>
         ) : suggestions.length === 0 ? (
           <p className="empty-state">
+            <IconLightbulb className="icon-empty" size={22} />
             Con {signals.length} señales resueltas, no hay ningún patrón lo bastante marcado todavía para sugerir
             un cambio.
           </p>
         ) : (
           <div className="suggestions-list">
             {suggestions.map((s) => (
-              <div key={s.id} className="suggestion-card">
-                <div className="suggestion-title">{s.title}</div>
-                <p className="suggestion-detail">{s.detail}</p>
-                <div className="suggestion-meta">
+              <div key={s.id} className="card">
+                <div className="card-header">
+                  <span className="icon-chip warn">
+                    <IconLightbulb size={15} />
+                  </span>
+                  <div className="card-title-group">
+                    <span className="card-title">{s.title}</span>
+                  </div>
+                </div>
+                <p className="card-body">{s.detail}</p>
+                <div className="card-footer">
                   Muestra: {s.sampleSize} señales · {s.bucketWinRatePct}% acierto (vs {s.baselineWinRatePct}%
                   general)
                 </div>
@@ -93,7 +122,10 @@ export default async function TradesPage() {
       <section>
         <h2>Histórico completo ({signals.length})</h2>
         {signals.length === 0 ? (
-          <p className="empty-state">Todavía no hay señales resueltas.</p>
+          <p className="empty-state">
+            <IconInbox className="icon-empty" size={22} />
+            Todavía no hay señales resueltas.
+          </p>
         ) : (
           <div className="table-wrap">
             <table>
@@ -111,25 +143,34 @@ export default async function TradesPage() {
                 </tr>
               </thead>
               <tbody>
-                {signals.map((s) => (
-                  <tr key={s.id}>
-                    <td>{fmtDate(s.closed_at ?? s.signal_ts)}</td>
-                    <td>
-                      <a href={`/asset/${s.asset_symbol}`}>{s.asset_symbol}</a>
-                    </td>
-                    <td className={s.direction === "LONG" ? "dir-long" : "dir-short"}>
-                      {s.direction === "LONG" ? "COMPRA" : "VENTA"}
-                    </td>
-                    <td>{fmtPrice(s.entry_price)}</td>
-                    <td className={s.status === "HIT_TP" ? "status-tp" : "status-sl"}>
-                      {s.status === "HIT_TP" ? "✅ TP" : "❌ SL"}
-                    </td>
-                    <td>{s.r_multiple != null ? s.r_multiple.toFixed(2) : "—"}</td>
-                    <td>{s.rsi_at_signal != null ? s.rsi_at_signal.toFixed(1) : "—"}</td>
-                    <td>{s.mae_r != null ? s.mae_r.toFixed(2) : "—"}</td>
-                    <td>{s.mfe_r != null ? s.mfe_r.toFixed(2) : "—"}</td>
-                  </tr>
-                ))}
+                {signals.map((s) => {
+                  const isTp = s.status === "HIT_TP";
+                  const DirIcon = s.direction === "LONG" ? IconTrendingUp : IconTrendingDown;
+                  const ResultIcon = isTp ? IconCheckCircle : IconXCircle;
+                  return (
+                    <tr key={s.id}>
+                      <td>{fmtDate(s.closed_at ?? s.signal_ts)}</td>
+                      <td>
+                        <a href={`/asset/${s.asset_symbol}`}>{s.asset_symbol}</a>
+                      </td>
+                      <td className={`dir ${s.direction === "LONG" ? "dir-long" : "dir-short"}`}>
+                        <DirIcon size={13} />
+                        {s.direction === "LONG" ? "COMPRA" : "VENTA"}
+                      </td>
+                      <td>{fmtPrice(s.entry_price)}</td>
+                      <td className={`status ${isTp ? "status-tp" : "status-sl"}`}>
+                        <ResultIcon size={13} />
+                        {isTp ? "TP" : "SL"}
+                      </td>
+                      <td className={s.r_multiple != null ? (s.r_multiple >= 0 ? "positive" : "negative") : undefined}>
+                        {s.r_multiple != null ? s.r_multiple.toFixed(2) : "—"}
+                      </td>
+                      <td>{s.rsi_at_signal != null ? s.rsi_at_signal.toFixed(1) : "—"}</td>
+                      <td>{s.mae_r != null ? s.mae_r.toFixed(2) : "—"}</td>
+                      <td>{s.mfe_r != null ? s.mfe_r.toFixed(2) : "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
