@@ -1,5 +1,7 @@
 """Acceso a Supabase (proyecto propio de señales-trading, service_role key)."""
 
+from datetime import datetime, timedelta
+
 from supabase import Client, create_client
 
 from worker import config
@@ -69,6 +71,40 @@ def close_signal(
         "mae_r": mae_r,
         "mfe_r": mfe_r,
     }).eq("id", signal_id).execute()
+
+
+def daily_review_exists(client: Client, review_date_iso: str) -> bool:
+    resp = client.table("daily_reviews").select("id").eq("review_date", review_date_iso).limit(1).execute()
+    return bool(resp.data)
+
+
+def get_signals_closed_on(client: Client, date_iso: str) -> list[dict]:
+    """Señales resueltas (HIT_TP/HIT_SL) cuyo closed_at cae dentro del día
+    `date_iso` (UTC), para la revisión narrada diaria."""
+    start = f"{date_iso}T00:00:00+00:00"
+    end_dt = datetime.fromisoformat(date_iso) + timedelta(days=1)
+    end = f"{end_dt.date().isoformat()}T00:00:00+00:00"
+    resp = (
+        client.table("signals")
+        .select("*")
+        .in_("status", ["HIT_TP", "HIT_SL"])
+        .gte("closed_at", start)
+        .lt("closed_at", end)
+        .execute()
+    )
+    return resp.data or []
+
+
+def fundamental_analysis_exists(client: Client, asset_id: str, analysis_date_iso: str) -> bool:
+    resp = (
+        client.table("fundamental_analyses")
+        .select("id")
+        .eq("asset_id", asset_id)
+        .eq("analysis_date", analysis_date_iso)
+        .limit(1)
+        .execute()
+    )
+    return bool(resp.data)
 
 
 def save_daily_review(client: Client, review_date_iso: str, signal_ids: list[str], narrative: str) -> None:

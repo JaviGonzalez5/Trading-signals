@@ -5,18 +5,31 @@ precio tocó ya el TP o el SL. Esto NO es aprendizaje automático de ningún
 tipo — es un registro objetivo de aciertos/fallos (igual criterio que
 backtest/engine.py::simulate_trades, pero sobre datos ya vividos en vez de
 un backtest) para que el usuario pueda ajustar la estrategia con datos
-reales. Pensado para correr como cron diario (servicio Railway aparte del
-worker 24/7), no como bucle.
+reales.
+
+Corre en Railway cada 5 minutos (antes cada 24h) — con la cadencia diaria
+un trade podía tocar TP/SL y el sistema tardaba hasta un día en enterarse
+y en avisar (bug real reportado por el usuario, viendo en la web una señal
+"Activa" que el gráfico mostraba claramente resuelta). La revisión narrada
+y el análisis fundamental (API de Claude, con coste real) NO deben
+dispararse en cada uno de esos ciclos de 5 min — se limitan a una vez al
+día mediante los *_exists() de abajo, no mediante el cron.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from worker import daily_review, db, fundamental_analysis
+from worker import daily_review, db, fundamental_analysis, telegram_client
 from worker.data_sources import fetch_candles_since
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("worker.check_results")
+
+# La revisión narrada resume el día completo — se espera a última hora UTC
+# para que capture los trades resueltos en cualquier momento del día, no
+# solo los del primer ciclo de 5 min que encuentre algo. daily_review_exists()
+# evita repetirla en los demás ciclos de esa misma hora.
+DAILY_REVIEW_HOUR_UTC = 23
 
 
 def evaluate_signal(signal: dict, df) -> dict | None:
@@ -73,6 +86,16 @@ def r_multiple_for(direction: str, entry: float, sl: float, exit_price: float) -
     return (entry - exit_price) / (sl - entry)
 
 
+def format_resolution_message(symbol: str, direction: str, status: str, exit_price: float, r_multiple: float) -> str:
+    emoji = "✅" if status == "HIT_TP" else "❌"
+    label = "TAKE PROFIT" if status == "HIT_TP" else "STOP LOSS"
+    return (
+        f"{emoji} {label} · {symbol}\n"
+        f"{direction} cerrada @ {exit_price:.5g}\n"
+        f"Resultado: {r_multiple:+.2f}R"
+    )
+
+
 def run() -> None:
     client = db.get_client()
     active_signals = db.get_active_signals(client)
@@ -80,7 +103,6 @@ def run() -> None:
 
     assets_cache: dict[str, dict | None] = {}
     resolved = 0
-    resolved_today: list[dict] = []
 
     for signal in active_signals:
         asset_id = signal["asset_id"]
@@ -122,32 +144,39 @@ def run() -> None:
             mfe_r=result["mfe_r"],
         )
         resolved += 1
-        resolved_today.append({
-            **signal,
-            "status": result["status"],
-            "exit_price": exit_price,
-            "r_multiple": round(r_mult, 3),
-            "mae_r": result["mae_r"],
-            "mfe_r": result["mfe_r"],
-        })
         log.info(
             "Señal %s (%s) resuelta: %s @ %s (R=%.2f)",
             signal["id"], asset["symbol"], result["status"], exit_price, r_mult,
         )
 
+        telegram_client.send_message(
+            format_resolution_message(asset["symbol"], signal["direction"], result["status"], exit_price, r_mult)
+        )
+
     log.info("Revisión completa. %d señal(es) resuelta(s) de %d activas.", resolved, len(active_signals))
 
-    if resolved_today and daily_review.is_configured():
-        asset_symbols = {aid: a["symbol"] for aid, a in assets_cache.items() if a is not None}
-        narrative = daily_review.generate_daily_review(resolved_today, asset_symbols)
-        if narrative:
-            today_iso = datetime.now(timezone.utc).date().isoformat()
-            db.save_daily_review(client, today_iso, [t["id"] for t in resolved_today], narrative)
-            log.info("Revisión narrada del %s guardada (%d trades).", today_iso, len(resolved_today))
+    now = datetime.now(timezone.utc)
+    today_iso = now.date().isoformat()
+
+    if daily_review.is_configured() and now.hour == DAILY_REVIEW_HOUR_UTC:
+        if not db.daily_review_exists(client, today_iso):
+            closed_today = db.get_signals_closed_on(client, today_iso)
+            if closed_today:
+                asset_ids = {s["asset_id"] for s in closed_today}
+                asset_symbols = {}
+                for aid in asset_ids:
+                    a = assets_cache.get(aid) or db.get_asset(client, aid)
+                    if a:
+                        asset_symbols[aid] = a["symbol"]
+                narrative = daily_review.generate_daily_review(closed_today, asset_symbols)
+                if narrative:
+                    db.save_daily_review(client, today_iso, [s["id"] for s in closed_today], narrative)
+                    log.info("Revisión narrada del %s guardada (%d trades).", today_iso, len(closed_today))
 
     if fundamental_analysis.is_configured():
-        today_iso = datetime.now(timezone.utc).date().isoformat()
         for asset in db.get_active_assets(client):
+            if db.fundamental_analysis_exists(client, asset["id"], today_iso):
+                continue
             result = fundamental_analysis.analyze_asset(asset["symbol"], asset["name"])
             if result:
                 db.save_fundamental_analysis(
