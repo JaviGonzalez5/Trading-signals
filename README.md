@@ -36,7 +36,18 @@ Ver `PROMPT_CLAUDE_CODE.md` para el plan completo por pasos.
   (servicio aparte del worker 24/7). Recorre las señales `ACTIVE`, mira las
   velas reales desde que se generaron y marca `HIT_TP`/`HIT_SL` en cuanto
   se toca alguno — mismo criterio que `backtest/engine.py`.
-- **Paso 5 (web)** — no iniciado.
+- **Paso 5 (web)** — código listo en `web/` (Next.js App Router):
+  - `/` — buscador de activos, con badge de señales activas por activo.
+  - `/asset/[symbol]` — señales activas, histórico y panel de estadísticas
+    (% acierto, retorno estimado, drawdown máximo) calculado con la misma
+    lógica que `backtest/engine.py::summarize` (`web/lib/stats.ts`), pero
+    usando el `risk_pct` real de cada señal en vez de uno fijo.
+  - Server Components leen Supabase directamente con la service_role key
+    (`web/lib/supabase-server.ts`, variables de entorno server-only, nunca
+    `NEXT_PUBLIC_` — la clave no llega al navegador).
+  - `npm run build` verificado en local (0 vulnerabilidades tras fijar
+    `postcss` vía `overrides` en `package.json`, mismo patrón que Voltreo).
+  - Pendiente de crear el proyecto en Vercel y desplegar.
 
 ## Estructura
 
@@ -49,6 +60,7 @@ worker/check_results.py      # cron diario: revisa señales ACTIVE, marca HIT_TP
 worker/data_sources.py       # Kraken (en uso) / Binance / yfinance (con incidencias, ver arriba)
 worker/db.py                 # acceso a Supabase (service_role)
 worker/telegram_client.py    # notificaciones (opcional)
+web/                          # frontend Next.js (búsqueda, señales, estadísticas)
 ```
 
 ## Variables de entorno
@@ -64,3 +76,9 @@ Dos servicios en el mismo proyecto `senales-trading`:
   (se ejecuta una vez y termina).
 
 Ambos comparten `SUPABASE_URL`/`SUPABASE_KEY`.
+
+## Despliegue en Vercel
+
+Proyecto Vercel apuntando a este repo con **root directory `web`**. Variables
+de entorno: `SUPABASE_URL`/`SUPABASE_KEY` (las mismas del worker, marcadas
+como server-only — nunca como "Exposed to the browser").
