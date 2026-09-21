@@ -109,6 +109,17 @@ def fetch_candles(asset: dict) -> pd.DataFrame:
     )
 
 
+def fetch_htf_candles(asset: dict, interval: str = "4h") -> pd.DataFrame:
+    """Velas de marco temporal superior para el filtro de tendencia (ver
+    strategy/core.py::generate_signals, parámetro htf_df) — mismo activo,
+    timeframe mayor. Solo Kraken por ahora (única fuente en producción)."""
+    source = asset["data_source"]
+    ticker = asset.get("source_ticker") or asset["symbol"]
+    if source == "kraken":
+        return fetch_kraken_klines(ticker, interval=interval)
+    raise ValueError(f"fetch_htf_candles no soportado todavía para la fuente '{source}'")
+
+
 def fetch_candles_since(asset: dict, since_ts) -> pd.DataFrame:
     """Velas posteriores a `since_ts` (datetime) — para revisar si una señal
     pasada ya tocó TP/SL. Solo soportado para Kraken por ahora (única fuente

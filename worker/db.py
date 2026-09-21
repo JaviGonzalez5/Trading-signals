@@ -78,6 +78,21 @@ def daily_review_exists(client: Client, review_date_iso: str) -> bool:
     return bool(resp.data)
 
 
+def get_recent_closed_signals(client: Client, asset_id: str, limit: int = 10) -> list[dict]:
+    """Últimos N cierres (HIT_TP/HIT_SL) de un activo, más recientes primero
+    — para que worker/risk_guard.py detecte una racha de pérdidas seguidas."""
+    resp = (
+        client.table("signals")
+        .select("status,closed_at")
+        .eq("asset_id", asset_id)
+        .in_("status", ["HIT_TP", "HIT_SL"])
+        .order("closed_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return resp.data or []
+
+
 def get_signals_closed_on(client: Client, date_iso: str) -> list[dict]:
     """Señales resueltas (HIT_TP/HIT_SL) cuyo closed_at cae dentro del día
     `date_iso` (UTC), para la revisión narrada diaria."""

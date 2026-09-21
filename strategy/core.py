@@ -23,6 +23,27 @@ ATR_PERIOD = 14
 SL_ATR_MULT = 1.5
 TP_ATR_MULT = 2.5
 
+# Filtro de tendencia en marco temporal superior (ver generate_signals,
+# parámetro htf_df) — mismo cruce EMA50/200 que el filtro de 1h, pero en 4h.
+# Inspirado en el bloque de roturas Forex/materias primas del curso de
+# Enrique Moris (usa 15m/1h/4h/1D para confirmar tendencia antes de operar
+# la rotura en el marco menor). Validado en scripts/backtest_improvements.py:
+# sin este filtro, BTC/ETH generaban roturas en contra de la tendencia mayor
+# durante los meses laterales del backtest (feb-abr 2026).
+HTF_EMA_FAST = 50
+HTF_EMA_SLOW = 200
+
+
+def compute_htf_trend(htf_df: pd.DataFrame) -> pd.Series:
+    """+1 alcista / -1 bajista / 0 sin datos suficientes, indexado por fecha
+    de vela del marco superior (p.ej. 4h)."""
+    ema_fast = htf_df["Close"].ewm(span=HTF_EMA_FAST, adjust=False).mean()
+    ema_slow = htf_df["Close"].ewm(span=HTF_EMA_SLOW, adjust=False).mean()
+    trend = pd.Series(0, index=htf_df.index)
+    trend[ema_fast > ema_slow] = 1
+    trend[ema_fast < ema_slow] = -1
+    return trend
+
 
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """Añade EMA50, EMA200, RSI14, ATR14 al DataFrame de velas (OHLC)."""
@@ -54,10 +75,17 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def generate_signals(df: pd.DataFrame) -> pd.DataFrame:
+def generate_signals(df: pd.DataFrame, htf_df: pd.DataFrame | None = None) -> pd.DataFrame:
     """
     Genera columna 'signal': 1 = compra, -1 = venta, 0 = sin señal.
     También añade 'sl' y 'tp' para las filas con señal.
+
+    htf_df (opcional): velas de un marco temporal superior (p.ej. 4h) del
+    mismo activo. Si se pasa, una señal solo es válida si la tendencia del
+    marco superior (EMA50/200 en htf_df) va en la misma dirección — evita
+    operar roturas de 1h en contra de la tendencia mayor. Cada vela de 1h
+    usa la última vela HTF ya cerrada en ese momento (merge_asof hacia
+    atrás), nunca una vela HTF futura.
     """
     df = compute_indicators(df)
 
@@ -72,6 +100,17 @@ def generate_signals(df: pd.DataFrame) -> pd.DataFrame:
 
     long_signal = trend_up & breakout_up & rsi_confirms_long
     short_signal = trend_down & breakout_down & rsi_confirms_short
+
+    if htf_df is not None and not htf_df.empty:
+        htf_trend = compute_htf_trend(htf_df)
+        left = df.index.to_frame(name="ts").reset_index(drop=True).sort_values("ts")
+        right = htf_trend.rename("htf_trend").reset_index()
+        right.columns = ["ts", "htf_trend"]
+        right = right.sort_values("ts")
+        merged = pd.merge_asof(left, right, on="ts", direction="backward")
+        aligned = merged.set_index("ts")["htf_trend"].reindex(df.index)
+        long_signal = long_signal & (aligned == 1)
+        short_signal = short_signal & (aligned == -1)
 
     df["signal"] = 0
     df.loc[long_signal, "signal"] = 1

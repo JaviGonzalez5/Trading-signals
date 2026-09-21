@@ -10,8 +10,8 @@ import time
 from datetime import datetime, timezone
 
 from strategy.core import generate_signals, position_size
-from worker import config, db, telegram_client
-from worker.data_sources import fetch_candles
+from worker import config, db, risk_guard, telegram_client
+from worker.data_sources import fetch_candles, fetch_htf_candles
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("worker")
@@ -46,7 +46,16 @@ def process_asset(client, asset: dict) -> None:
         log.warning("Datos insuficientes para %s (%d velas)", symbol, len(df))
         return
 
-    df = generate_signals(df)
+    htf_df = None
+    try:
+        htf_df = fetch_htf_candles(asset)
+    except Exception as e:
+        # Filtro de mejora, no de seguridad — si falla la descarga del marco
+        # superior seguimos operando sin él en vez de dejar de generar
+        # señales por un fallo puntual de Kraken.
+        log.warning("No se pudo descargar el marco temporal superior de %s: %s — sin filtro HTF este ciclo.", symbol, e)
+
+    df = generate_signals(df, htf_df=htf_df)
     last = df.iloc[-1]
     if last["signal"] == 0:
         return
@@ -56,6 +65,13 @@ def process_asset(client, asset: dict) -> None:
 
     if db.has_signal_for_ts(client, asset["id"], signal_ts_iso):
         return  # esta vela ya se procesó (evita duplicar en cada ciclo)
+
+    if risk_guard.is_paused(client, asset["id"]):
+        log.info(
+            "%s en pausa por racha de pérdidas (circuit breaker) — señal de %s omitida.",
+            symbol, signal_ts_iso,
+        )
+        return
 
     direction = "LONG" if last["signal"] == 1 else "SHORT"
     entry = float(last["Close"])
