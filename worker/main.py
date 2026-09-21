@@ -18,6 +18,14 @@ log = logging.getLogger("worker")
 
 MIN_CANDLES_NEEDED = 210  # EMA200 + margen para que no salga NaN
 
+# Activos donde el filtro de tendencia HTF (4h) demostró mejorar el backtest
+# real (ver scripts/backtest_improvements.py, 6 meses de datos reales). En
+# BTC el filtro EMPEORA el resultado en todo: menos operaciones, peor
+# drawdown (-36.66% -> -50.33%) — el cruce EMA50/200 en 4h va por detrás de
+# los giros rápidos de BTC y filtra justo las entradas buenas. Se deja BTC
+# fuera a propósito, con datos que lo respaldan, no por descuido.
+HTF_FILTER_ASSETS = {"ETH", "XAUUSD"}
+
 
 def format_signal_message(symbol: str, direction: str, entry: float, sl: float, tp: float, size) -> str:
     emoji = "🟢 COMPRA" if direction == "LONG" else "🔴 VENTA"
@@ -47,13 +55,14 @@ def process_asset(client, asset: dict) -> None:
         return
 
     htf_df = None
-    try:
-        htf_df = fetch_htf_candles(asset)
-    except Exception as e:
-        # Filtro de mejora, no de seguridad — si falla la descarga del marco
-        # superior seguimos operando sin él en vez de dejar de generar
-        # señales por un fallo puntual de Kraken.
-        log.warning("No se pudo descargar el marco temporal superior de %s: %s — sin filtro HTF este ciclo.", symbol, e)
+    if symbol in HTF_FILTER_ASSETS:
+        try:
+            htf_df = fetch_htf_candles(asset)
+        except Exception as e:
+            # Filtro de mejora, no de seguridad — si falla la descarga del
+            # marco superior seguimos operando sin él en vez de dejar de
+            # generar señales por un fallo puntual de Kraken.
+            log.warning("No se pudo descargar el marco temporal superior de %s: %s — sin filtro HTF este ciclo.", symbol, e)
 
     df = generate_signals(df, htf_df=htf_df)
     last = df.iloc[-1]

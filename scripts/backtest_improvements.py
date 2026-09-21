@@ -37,6 +37,11 @@ PAIRS = {
     "XAUUSD (proxy PAXG)": "PAXGUSD",
 }
 
+# Config final que va a producción (worker/main.py::HTF_FILTER_ASSETS) — el
+# circuit breaker se aplica siempre, el filtro HTF solo donde el backtest
+# demostró que ayuda (en BTC lo empeora, ver commit db8cafa).
+FINAL_CONFIG_USES_HTF = {"BTC": False, "ETH": True, "XAUUSD (proxy PAXG)": True}
+
 
 def download_quarter_pair(quarter: str, pair_prefix: str, minute_suffix: str) -> pd.DataFrame | None:
     url = BASE_URL.format(q=quarter)
@@ -126,6 +131,9 @@ def run() -> None:
         run_variant("+ filtro HTF 4h", raw_1h, htf_df=raw_4h if not raw_4h.empty else None, use_breaker=False)
         run_variant("+ circuit breaker", raw_1h, htf_df=None, use_breaker=True)
         run_variant("+ HTF + circuit breaker", raw_1h, htf_df=raw_4h if not raw_4h.empty else None, use_breaker=True)
+
+        final_htf = raw_4h if (FINAL_CONFIG_USES_HTF.get(name) and not raw_4h.empty) else None
+        run_variant("CONFIG FINAL EN PRODUCCIÓN", raw_1h, htf_df=final_htf, use_breaker=True)
 
 
 if __name__ == "__main__":
