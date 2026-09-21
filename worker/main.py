@@ -75,6 +75,10 @@ def process_asset(client, asset: dict) -> None:
     if db.has_signal_for_ts(client, asset["id"], signal_ts_iso):
         return  # esta vela ya se procesó (evita duplicar en cada ciclo)
 
+    if db.has_active_signal_for_asset(client, asset["id"]):
+        log.info("%s ya tiene una posición abierta — señal de %s omitida (una operación por activo a la vez).", symbol, signal_ts_iso)
+        return
+
     if risk_guard.is_paused(client, asset["id"]):
         log.info(
             "%s en pausa por racha de pérdidas (circuit breaker) — señal de %s omitida.",

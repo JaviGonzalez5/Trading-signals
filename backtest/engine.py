@@ -7,6 +7,8 @@ No usa look-ahead bias (solo usa datos ya conocidos hasta la vela de la señal).
 
 import pandas as pd
 
+from strategy.risk import COOLDOWN_HOURS, LOSS_STREAK_THRESHOLD
+
 
 def simulate_trades(df: pd.DataFrame, max_bars_forward: int = 200) -> pd.DataFrame:
     """
@@ -81,6 +83,59 @@ def simulate_trades(df: pd.DataFrame, max_bars_forward: int = 200) -> pd.DataFra
         })
 
     return pd.DataFrame(trades)
+
+
+def filter_non_overlapping(trades: pd.DataFrame) -> pd.DataFrame:
+    """Descarta operaciones que se solaparían con una ya abierta del mismo
+    activo — simulate_trades() genera una operación por cada señal
+    independientemente de si la anterior sigue abierta, lo cual no es
+    realista: en vivo (y en el capital real de una cuenta prop firm) solo
+    hay una posición abierta por activo a la vez (worker/risk_guard.py no
+    abre una señal nueva si la anterior de ese activo no se ha resuelto).
+
+    Sin este filtro, sumar r_multiple de operaciones solapadas como si
+    fueran secuenciales infla el retorno y subestima el drawdown real
+    (varias pérdidas "al mismo tiempo" cuentan como si fueran una detrás de
+    otra). Se queda con la primera operación que empieza y descarta
+    cualquiera que arranque antes de que esa se haya cerrado."""
+    if trades.empty:
+        return trades
+    trades = trades.sort_values("entry_date").reset_index(drop=True)
+    keep_idx = []
+    last_exit = None
+    for i, row in trades.iterrows():
+        if last_exit is not None and row["entry_date"] < last_exit:
+            continue
+        keep_idx.append(i)
+        last_exit = row["exit_date"]
+    return trades.loc[keep_idx]
+
+
+def apply_circuit_breaker(trades: pd.DataFrame) -> pd.DataFrame:
+    """Simula el circuit breaker de strategy/risk.py sobre una lista de
+    operaciones ya generada: tras LOSS_STREAK_THRESHOLD pérdidas seguidas,
+    descarta las operaciones siguientes hasta que pasen COOLDOWN_HOURS desde
+    el cierre de la última pérdida de la racha — igual que
+    worker/risk_guard.py en vivo, reconstruido a partir del propio
+    historial de trades en vez de leer Supabase."""
+    if trades.empty:
+        return trades
+    trades = trades.sort_values("entry_date").reset_index(drop=True)
+    keep_idx = []
+    streak = 0
+    paused_until = None
+    for i, row in trades.iterrows():
+        if paused_until is not None and row["entry_date"] < paused_until:
+            continue
+        keep_idx.append(i)
+        if row["outcome"] == "SL":
+            streak += 1
+        elif row["outcome"] == "TP":
+            streak = 0
+        if streak >= LOSS_STREAK_THRESHOLD:
+            paused_until = row["exit_date"] + pd.Timedelta(hours=COOLDOWN_HOURS)
+            streak = 0
+    return trades.loc[keep_idx]
 
 
 def summarize(trades: pd.DataFrame, risk_pct: float = 1.0) -> dict:

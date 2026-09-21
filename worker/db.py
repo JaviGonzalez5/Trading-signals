@@ -47,6 +47,22 @@ def get_active_signals(client: Client) -> list[dict]:
     return resp.data or []
 
 
+def has_active_signal_for_asset(client: Client, asset_id: str) -> bool:
+    """True si ya hay una señal ACTIVE de este activo — evita abrir una
+    segunda posición del mismo activo antes de que la anterior se resuelva
+    (una operación abierta por activo a la vez, igual que asume el backtest
+    tras backtest/engine.py::filter_non_overlapping)."""
+    resp = (
+        client.table("signals")
+        .select("id")
+        .eq("asset_id", asset_id)
+        .eq("status", "ACTIVE")
+        .limit(1)
+        .execute()
+    )
+    return bool(resp.data)
+
+
 def get_asset(client: Client, asset_id: str) -> dict | None:
     resp = client.table("assets").select("*").eq("id", asset_id).limit(1).execute()
     data = resp.data or []
