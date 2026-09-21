@@ -42,6 +42,16 @@ VOLUME_CONFIRM_MULT = 1.2
 HTF_EMA_FAST = 50
 HTF_EMA_SLOW = 200
 
+# ADX — fuerza de tendencia (ver generate_signals, parámetro min_adx).
+# Un breakout de estructura en un mercado LATERAL (sin tendencia real) es
+# el tipo de operación que más falla — el ADX es el indicador estándar
+# para distinguir "hay tendencia" de "está en rango". Análisis del
+# backtest (scripts/backtest_diagnose_v2.py) encontró rachas de hasta 15
+# pérdidas seguidas en BTC concentradas en meses laterales (feb-abr) —
+# candidato directo a filtrar con esto. Opcional, default None (sin
+# filtro), hasta validarlo por activo con datos reales.
+ADX_PERIOD = 14
+
 
 def compute_htf_trend(htf_df: pd.DataFrame) -> pd.Series:
     """+1 alcista / -1 bajista / 0 sin datos suficientes, indexado por fecha
@@ -84,6 +94,17 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # Volumen medio para confirmar roturas (ver generate_signals)
     df["volume_ma"] = df["Volume"].rolling(VOLUME_MA_PERIOD).mean()
 
+    # ADX (fuerza de tendencia) — suavizado de Wilder, fórmula estándar
+    up_move = df["High"].diff()
+    down_move = -df["Low"].diff()
+    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=df.index)
+    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=df.index)
+    atr_wilder = true_range.ewm(alpha=1 / ADX_PERIOD, adjust=False).mean()
+    plus_di = 100 * (plus_dm.ewm(alpha=1 / ADX_PERIOD, adjust=False).mean() / atr_wilder)
+    minus_di = 100 * (minus_dm.ewm(alpha=1 / ADX_PERIOD, adjust=False).mean() / atr_wilder)
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    df["adx"] = dx.ewm(alpha=1 / ADX_PERIOD, adjust=False).mean()
+
     return df
 
 
@@ -91,6 +112,11 @@ def generate_signals(
     df: pd.DataFrame,
     htf_df: pd.DataFrame | None = None,
     require_volume_confirmation: bool = False,
+    min_adx: float | None = None,
+    exclude_weekdays: set[int] | None = None,
+    exclude_hours: set[int] | None = None,
+    allow_long: bool = True,
+    allow_short: bool = True,
 ) -> pd.DataFrame:
     """
     Genera columna 'signal': 1 = compra, -1 = venta, 0 = sin señal.
@@ -107,6 +133,18 @@ def generate_signals(
     volumen de la vela de rotura supere VOLUME_CONFIRM_MULT veces su media
     de VOLUME_MA_PERIOD velas — una rotura sin volumen por encima de lo
     normal es más sospechosa de ser falsa.
+
+    min_adx (opcional): exige ADX >= min_adx en la vela de rotura — filtra
+    roturas en mercado lateral/sin tendencia real (valores típicos: 20-25).
+
+    exclude_weekdays (opcional): días de la semana a excluir de la entrada
+    (0=lunes ... 6=domingo, como pandas .dayofweek).
+
+    exclude_hours (opcional): horas UTC (0-23) a excluir de la entrada.
+
+    allow_long / allow_short (opcional, default True): permite desactivar
+    un lado completo de la estrategia para un activo donde ese lado no
+    tiene edge real.
     """
     df = compute_indicators(df)
 
@@ -137,6 +175,28 @@ def generate_signals(
         aligned = merged.set_index("ts")["htf_trend"].reindex(df.index)
         long_signal = long_signal & (aligned == 1)
         short_signal = short_signal & (aligned == -1)
+
+    if min_adx is not None:
+        adx_confirms = df["adx"] >= min_adx
+        long_signal = long_signal & adx_confirms
+        short_signal = short_signal & adx_confirms
+
+    if exclude_weekdays:
+        weekday = pd.Series(df.index.dayofweek, index=df.index)
+        day_ok = ~weekday.isin(exclude_weekdays)
+        long_signal = long_signal & day_ok
+        short_signal = short_signal & day_ok
+
+    if exclude_hours:
+        hour = pd.Series(df.index.hour, index=df.index)
+        hour_ok = ~hour.isin(exclude_hours)
+        long_signal = long_signal & hour_ok
+        short_signal = short_signal & hour_ok
+
+    if not allow_long:
+        long_signal = long_signal & False
+    if not allow_short:
+        short_signal = short_signal & False
 
     df["signal"] = 0
     df.loc[long_signal, "signal"] = 1
