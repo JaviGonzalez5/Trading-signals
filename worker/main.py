@@ -18,13 +18,19 @@ log = logging.getLogger("worker")
 
 MIN_CANDLES_NEEDED = 210  # EMA200 + margen para que no salga NaN
 
-# Activos donde el filtro de tendencia HTF (4h) demostró mejorar el backtest
-# real (ver scripts/backtest_improvements.py, 6 meses de datos reales). En
-# BTC el filtro EMPEORA el resultado en todo: menos operaciones, peor
-# drawdown (-36.66% -> -50.33%) — el cruce EMA50/200 en 4h va por detrás de
-# los giros rápidos de BTC y filtra justo las entradas buenas. Se deja BTC
-# fuera a propósito, con datos que lo respaldan, no por descuido.
+# Activos donde el filtro de tendencia HTF demostró mejorar el backtest real
+# (ver scripts/backtest_improvements.py y scripts/backtest_15m_decision.py,
+# 6 meses de datos reales, con circuit breaker y sin solape de operaciones).
+# En BTC el filtro EMPEORA el resultado en todo — se deja fuera a propósito,
+# con datos que lo respaldan, no por descuido.
 HTF_FILTER_ASSETS = {"ETH", "XAUUSD"}
+
+# Marco temporal del filtro HTF por activo: XAUUSD usa 4h (validado con
+# entrada en 1h). ETH cambió su ENTRADA a 15m (ver assets.timeframe en
+# Supabase, scripts/backtest_15m_decision.py: retorno 3.35% -> 26.04%,
+# drawdown -17.99% -> -13.66%) — para ETH el filtro de tendencia validado es
+# 1h, no 4h (un escalón por encima de su nueva entrada, no dos).
+HTF_INTERVAL_BY_SYMBOL = {"ETH": "1h", "XAUUSD": "4h"}
 
 
 def format_signal_message(symbol: str, direction: str, entry: float, sl: float, tp: float, size) -> str:
@@ -57,7 +63,8 @@ def process_asset(client, asset: dict) -> None:
     htf_df = None
     if symbol in HTF_FILTER_ASSETS:
         try:
-            htf_df = fetch_htf_candles(asset)
+            htf_interval = HTF_INTERVAL_BY_SYMBOL.get(symbol, "4h")
+            htf_df = fetch_htf_candles(asset, interval=htf_interval)
         except Exception as e:
             # Filtro de mejora, no de seguridad — si falla la descarga del
             # marco superior seguimos operando sin él en vez de dejar de
