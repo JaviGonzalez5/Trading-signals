@@ -21,8 +21,8 @@ export default function PriceChart({ candles, signals }: { candles: Candle[]; si
     if (!containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
-      layout: { background: { type: ColorType.Solid, color: "#131a22" }, textColor: "#e6edf3" },
-      grid: { vertLines: { color: "#232e3a" }, horzLines: { color: "#232e3a" } },
+      layout: { background: { type: ColorType.Solid, color: "#131519" }, textColor: "#c3c7cd" },
+      grid: { vertLines: { color: "#1a1c21" }, horzLines: { color: "#1a1c21" } },
       width: containerRef.current.clientWidth,
       height: 360,
       timeScale: { timeVisible: true, secondsVisible: false },
@@ -30,11 +30,11 @@ export default function PriceChart({ candles, signals }: { candles: Candle[]; si
     chartRef.current = chart;
 
     const series = chart.addCandlestickSeries({
-      upColor: "#3fb950",
-      downColor: "#f85149",
+      upColor: "#3ecf8e",
+      downColor: "#f2555a",
       borderVisible: false,
-      wickUpColor: "#3fb950",
-      wickDownColor: "#f85149",
+      wickUpColor: "#3ecf8e",
+      wickDownColor: "#f2555a",
     });
     seriesRef.current = series;
 
@@ -65,21 +65,21 @@ export default function PriceChart({ candles, signals }: { candles: Candle[]; si
     for (const s of signals) {
       seriesRef.current.createPriceLine({
         price: s.entry_price,
-        color: "#58a6ff",
+        color: "#5b9cf6",
         lineWidth: 1,
         lineStyle: 2,
         title: `Entrada ${s.direction}`,
       });
       seriesRef.current.createPriceLine({
         price: s.stop_loss,
-        color: "#f85149",
+        color: "#f2555a",
         lineWidth: 1,
         lineStyle: 2,
         title: "SL",
       });
       seriesRef.current.createPriceLine({
         price: s.take_profit,
-        color: "#3fb950",
+        color: "#3ecf8e",
         lineWidth: 1,
         lineStyle: 2,
         title: "TP",
@@ -93,5 +93,9 @@ export default function PriceChart({ candles, signals }: { candles: Candle[]; si
     return <p className="empty-state">Sin datos de precio disponibles ahora mismo.</p>;
   }
 
-  return <div ref={containerRef} />;
+  return (
+    <div className="chart-card">
+      <div ref={containerRef} />
+    </div>
+  );
 }

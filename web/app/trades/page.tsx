@@ -37,7 +37,7 @@ export default async function TradesPage() {
       </a>
       <div className="asset-header">
         <h1>Diario de trades</h1>
-        <p style={{ color: "var(--muted)" }}>
+        <p className="page-subtitle">
           Todas las señales resueltas, con el contexto que las generó — para que decidas tú qué ajustar, no un
           sistema automático.
         </p>
@@ -95,42 +95,44 @@ export default async function TradesPage() {
         {signals.length === 0 ? (
           <p className="empty-state">Todavía no hay señales resueltas.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Activo</th>
-                <th>Dirección</th>
-                <th>Entrada</th>
-                <th>Resultado</th>
-                <th>R</th>
-                <th>RSI señal</th>
-                <th>MAE (R)</th>
-                <th>MFE (R)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {signals.map((s) => (
-                <tr key={s.id}>
-                  <td>{fmtDate(s.closed_at ?? s.signal_ts)}</td>
-                  <td>
-                    <a href={`/asset/${s.asset_symbol}`}>{s.asset_symbol}</a>
-                  </td>
-                  <td className={s.direction === "LONG" ? "dir-long" : "dir-short"}>
-                    {s.direction === "LONG" ? "COMPRA" : "VENTA"}
-                  </td>
-                  <td>{fmtPrice(s.entry_price)}</td>
-                  <td className={s.status === "HIT_TP" ? "status-tp" : "status-sl"}>
-                    {s.status === "HIT_TP" ? "✅ TP" : "❌ SL"}
-                  </td>
-                  <td>{s.r_multiple != null ? s.r_multiple.toFixed(2) : "—"}</td>
-                  <td>{s.rsi_at_signal != null ? s.rsi_at_signal.toFixed(1) : "—"}</td>
-                  <td>{s.mae_r != null ? s.mae_r.toFixed(2) : "—"}</td>
-                  <td>{s.mfe_r != null ? s.mfe_r.toFixed(2) : "—"}</td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Activo</th>
+                  <th>Dirección</th>
+                  <th>Entrada</th>
+                  <th>Resultado</th>
+                  <th>R</th>
+                  <th>RSI señal</th>
+                  <th>MAE (R)</th>
+                  <th>MFE (R)</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {signals.map((s) => (
+                  <tr key={s.id}>
+                    <td>{fmtDate(s.closed_at ?? s.signal_ts)}</td>
+                    <td>
+                      <a href={`/asset/${s.asset_symbol}`}>{s.asset_symbol}</a>
+                    </td>
+                    <td className={s.direction === "LONG" ? "dir-long" : "dir-short"}>
+                      {s.direction === "LONG" ? "COMPRA" : "VENTA"}
+                    </td>
+                    <td>{fmtPrice(s.entry_price)}</td>
+                    <td className={s.status === "HIT_TP" ? "status-tp" : "status-sl"}>
+                      {s.status === "HIT_TP" ? "✅ TP" : "❌ SL"}
+                    </td>
+                    <td>{s.r_multiple != null ? s.r_multiple.toFixed(2) : "—"}</td>
+                    <td>{s.rsi_at_signal != null ? s.rsi_at_signal.toFixed(1) : "—"}</td>
+                    <td>{s.mae_r != null ? s.mae_r.toFixed(2) : "—"}</td>
+                    <td>{s.mfe_r != null ? s.mfe_r.toFixed(2) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </>

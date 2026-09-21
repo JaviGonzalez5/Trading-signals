@@ -25,22 +25,24 @@ export default function EquityChart({ points }: { points: EquityPoint[] }) {
   const areaPath = `${linePath} L ${xFor(points.length - 1)} ${zeroY} L ${xFor(0)} ${zeroY} Z`;
 
   const last = points[points.length - 1].cum;
-  const lineColor = last >= 0 ? "#3fb950" : "#f85149";
+  const lineColor = last >= 0 ? "#3ecf8e" : "#f2555a";
 
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height={HEIGHT} role="img" aria-label="Curva de rentabilidad acumulada">
-      <line x1={PAD} y1={zeroY} x2={WIDTH - PAD} y2={zeroY} stroke="#232e3a" strokeDasharray="4 4" />
-      <path d={areaPath} fill={lineColor} fillOpacity={0.12} stroke="none" />
-      <path d={linePath} fill="none" stroke={lineColor} strokeWidth={2} />
-      {points.map((p, i) => (
-        <circle key={i} cx={xFor(i)} cy={yFor(p.cum)} r={3} fill={lineColor} />
-      ))}
-      <text x={PAD} y={16} fill="#8b98a5" fontSize={11}>
-        {max.toFixed(1)}%
-      </text>
-      <text x={PAD} y={HEIGHT - 8} fill="#8b98a5" fontSize={11}>
-        {min.toFixed(1)}%
-      </text>
-    </svg>
+    <div className="chart-card">
+      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height={HEIGHT} role="img" aria-label="Curva de rentabilidad acumulada">
+        <line x1={PAD} y1={zeroY} x2={WIDTH - PAD} y2={zeroY} stroke="#23262c" strokeDasharray="4 4" />
+        <path d={areaPath} fill={lineColor} fillOpacity={0.12} stroke="none" />
+        <path d={linePath} fill="none" stroke={lineColor} strokeWidth={2} />
+        {points.map((p, i) => (
+          <circle key={i} cx={xFor(i)} cy={yFor(p.cum)} r={3} fill={lineColor} />
+        ))}
+        <text x={PAD} y={16} fill="#82868f" fontSize={11}>
+          {max.toFixed(1)}%
+        </text>
+        <text x={PAD} y={HEIGHT - 8} fill="#82868f" fontSize={11}>
+          {min.toFixed(1)}%
+        </text>
+      </svg>
+    </div>
   );
 }

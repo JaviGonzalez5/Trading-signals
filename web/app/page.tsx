@@ -8,6 +8,10 @@ export default async function HomePage() {
 
   return (
     <>
+      <div className="asset-header">
+        <h1>Activos</h1>
+        <p className="page-subtitle">Busca un activo para ver sus señales, gráfico y estadísticas.</p>
+      </div>
       <AssetSearch assets={assets} activeCounts={activeCounts} />
     </>
   );

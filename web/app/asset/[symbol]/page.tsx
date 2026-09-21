@@ -63,39 +63,41 @@ function SignalsTable({ signals, showResult }: { signals: Signal[]; showResult: 
     return <p className="empty-state">Nada por aquí todavía.</p>;
   }
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Fecha</th>
-          <th>Dirección</th>
-          <th>Entrada</th>
-          <th>SL</th>
-          <th>TP</th>
-          {showResult && <th>Resultado</th>}
-          {showResult && <th>R</th>}
-          <th>Estado</th>
-        </tr>
-      </thead>
-      <tbody>
-        {signals.map((s) => {
-          const st = statusLabel(s.status);
-          return (
-            <tr key={s.id}>
-              <td>{fmtDate(s.signal_ts)}</td>
-              <td className={s.direction === "LONG" ? "dir-long" : "dir-short"}>
-                {s.direction === "LONG" ? "COMPRA" : "VENTA"}
-              </td>
-              <td>{fmtPrice(s.entry_price)}</td>
-              <td>{fmtPrice(s.stop_loss)}</td>
-              <td>{fmtPrice(s.take_profit)}</td>
-              {showResult && <td>{s.exit_price != null ? fmtPrice(s.exit_price) : "—"}</td>}
-              {showResult && <td>{s.r_multiple != null ? s.r_multiple.toFixed(2) : "—"}</td>}
-              <td className={st.cls}>{st.text}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Dirección</th>
+            <th>Entrada</th>
+            <th>SL</th>
+            <th>TP</th>
+            {showResult && <th>Resultado</th>}
+            {showResult && <th>R</th>}
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {signals.map((s) => {
+            const st = statusLabel(s.status);
+            return (
+              <tr key={s.id}>
+                <td>{fmtDate(s.signal_ts)}</td>
+                <td className={s.direction === "LONG" ? "dir-long" : "dir-short"}>
+                  {s.direction === "LONG" ? "COMPRA" : "VENTA"}
+                </td>
+                <td>{fmtPrice(s.entry_price)}</td>
+                <td>{fmtPrice(s.stop_loss)}</td>
+                <td>{fmtPrice(s.take_profit)}</td>
+                {showResult && <td>{s.exit_price != null ? fmtPrice(s.exit_price) : "—"}</td>}
+                {showResult && <td>{s.r_multiple != null ? s.r_multiple.toFixed(2) : "—"}</td>}
+                <td className={st.cls}>{st.text}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -131,7 +133,7 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
       </a>
       <div className="asset-header">
         <h1>{asset.symbol}</h1>
-        <p style={{ color: "var(--muted)" }}>{asset.name}</p>
+        <p className="page-subtitle">{asset.name}</p>
       </div>
 
       {latestFundamental && (
