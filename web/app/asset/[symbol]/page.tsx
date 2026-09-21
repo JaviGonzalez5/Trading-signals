@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { getAssetBySymbol, getSignalsForAsset, type Signal } from "@/lib/data";
-import { summarize } from "@/lib/stats";
+import { summarize, equityCurve } from "@/lib/stats";
+import { fetchKrakenCandles } from "@/lib/kraken";
+import PriceChart from "@/components/PriceChart";
+import EquityChart from "@/components/EquityChart";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +89,17 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
   const active = signals.filter((s) => s.status === "ACTIVE");
   const historic = signals.filter((s) => s.status !== "ACTIVE");
   const stats = summarize(signals);
+  const curve = equityCurve(signals);
+
+  let candles: Awaited<ReturnType<typeof fetchKrakenCandles>> = [];
+  if (asset.data_source === "kraken") {
+    const fiveDaysAgo = Math.floor(Date.now() / 1000) - 5 * 24 * 3600;
+    try {
+      candles = await fetchKrakenCandles(asset.source_ticker ?? asset.symbol, asset.timeframe, fiveDaysAgo);
+    } catch {
+      candles = []; // el resto de la página sigue funcionando sin el gráfico de precio
+    }
+  }
 
   return (
     <>
@@ -136,6 +150,27 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
           </div>
         )}
       </section>
+
+      <section>
+        <h2>Precio (últimos días)</h2>
+        <PriceChart
+          candles={candles}
+          signals={active.map((s) => ({
+            id: s.id,
+            direction: s.direction,
+            entry_price: s.entry_price,
+            stop_loss: s.stop_loss,
+            take_profit: s.take_profit,
+          }))}
+        />
+      </section>
+
+      {curve.length >= 2 && (
+        <section>
+          <h2>Rentabilidad acumulada</h2>
+          <EquityChart points={curve} />
+        </section>
+      )}
 
       <section>
         <h2>Señales activas</h2>

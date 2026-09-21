@@ -17,15 +17,36 @@ export type Stats = {
 
 const round = (n: number, decimals: number) => Math.round(n * 10 ** decimals) / 10 ** decimals;
 
+export type EquityPoint = { date: string; cum: number };
+
+/** Señales resueltas (HIT_TP/HIT_SL) ordenadas por fecha de cierre — la
+ * misma base que usan summarize() y equityCurve(), factorizada para no
+ * ordenar dos veces. */
+function resolvedSignals(signals: Signal[]): Signal[] {
+  return signals
+    .filter((s) => s.status === "HIT_TP" || s.status === "HIT_SL")
+    .slice()
+    .sort((a, b) => new Date(a.closed_at ?? a.signal_ts).getTime() - new Date(b.closed_at ?? b.signal_ts).getTime());
+}
+
+/** Curva de equity: cada punto es la rentabilidad acumulada (%) justo
+ * después de cerrarse esa señal. Usada tanto por summarize() (para el
+ * drawdown máximo) como por el gráfico de la web. */
+export function equityCurve(signals: Signal[]): EquityPoint[] {
+  const resolved = resolvedSignals(signals);
+  let cum = 0;
+  return resolved.map((s) => {
+    cum += (s.r_multiple ?? 0) * (s.risk_pct ?? 1);
+    return { date: s.closed_at ?? s.signal_ts, cum: round(cum, 3) };
+  });
+}
+
 /** Solo cuentan las señales ya resueltas (HIT_TP/HIT_SL) — mismo criterio
  * que backtest/engine.py::summarize. TIMEOUT/CANCELLED no puntúan a favor
  * ni en contra (no hay bastantes en producción todavía para decidir cómo
  * tratarlas; se dejan fuera a propósito). */
 export function summarize(signals: Signal[]): Stats {
-  const resolved = signals
-    .filter((s) => s.status === "HIT_TP" || s.status === "HIT_SL")
-    .slice()
-    .sort((a, b) => new Date(a.closed_at ?? a.signal_ts).getTime() - new Date(b.closed_at ?? b.signal_ts).getTime());
+  const resolved = resolvedSignals(signals);
 
   if (resolved.length === 0) {
     return {
@@ -46,13 +67,12 @@ export function summarize(signals: Signal[]): Stats {
   const totalR = rValues.reduce((a, b) => a + b, 0);
   const avgR = totalR / resolved.length;
 
-  let cum = 0;
+  const curve = equityCurve(signals);
   let peak = 0;
   let maxDD = 0;
-  for (const s of resolved) {
-    cum += (s.r_multiple ?? 0) * (s.risk_pct ?? 1);
-    peak = Math.max(peak, cum);
-    maxDD = Math.min(maxDD, cum - peak);
+  for (const p of curve) {
+    peak = Math.max(peak, p.cum);
+    maxDD = Math.min(maxDD, p.cum - peak);
   }
 
   return {
@@ -62,7 +82,7 @@ export function summarize(signals: Signal[]): Stats {
     winRatePct: round((wins.length / resolved.length) * 100, 2),
     avgRMultiple: round(avgR, 3),
     totalRMultiple: round(totalR, 2),
-    estimatedReturnPct: round(cum, 2),
+    estimatedReturnPct: round(curve[curve.length - 1]?.cum ?? 0, 2),
     maxDrawdownPct: round(maxDD, 2),
   };
 }

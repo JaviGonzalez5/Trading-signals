@@ -6,6 +6,8 @@ export type Asset = {
   name: string;
   asset_class: string;
   data_source: string;
+  source_ticker: string | null;
+  timeframe: string;
   active: boolean;
 };
 
