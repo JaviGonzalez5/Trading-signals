@@ -23,6 +23,15 @@ ATR_PERIOD = 14
 SL_ATR_MULT = 1.5
 TP_ATR_MULT = 2.5
 
+# Confirmación por volumen (ver generate_signals, parámetro
+# require_volume_confirmation) — inspirado en el bloque de "Lectura de
+# volumen avanzada para roturas" del curso de Enrique Moris: una rotura de
+# estructura sin volumen por encima de lo normal es más sospechosa de ser
+# una rotura falsa. Se deja como parámetro opcional (default False, cero
+# cambio de comportamiento) hasta validarlo por activo con datos reales.
+VOLUME_MA_PERIOD = 20
+VOLUME_CONFIRM_MULT = 1.2
+
 # Filtro de tendencia en marco temporal superior (ver generate_signals,
 # parámetro htf_df) — mismo cruce EMA50/200 que el filtro de 1h, pero en 4h.
 # Inspirado en el bloque de roturas Forex/materias primas del curso de
@@ -72,10 +81,17 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["structure_high"] = df["High"].shift(1).rolling(STRUCTURE_LOOKBACK).max()
     df["structure_low"] = df["Low"].shift(1).rolling(STRUCTURE_LOOKBACK).min()
 
+    # Volumen medio para confirmar roturas (ver generate_signals)
+    df["volume_ma"] = df["Volume"].rolling(VOLUME_MA_PERIOD).mean()
+
     return df
 
 
-def generate_signals(df: pd.DataFrame, htf_df: pd.DataFrame | None = None) -> pd.DataFrame:
+def generate_signals(
+    df: pd.DataFrame,
+    htf_df: pd.DataFrame | None = None,
+    require_volume_confirmation: bool = False,
+) -> pd.DataFrame:
     """
     Genera columna 'signal': 1 = compra, -1 = venta, 0 = sin señal.
     También añade 'sl' y 'tp' para las filas con señal.
@@ -86,6 +102,11 @@ def generate_signals(df: pd.DataFrame, htf_df: pd.DataFrame | None = None) -> pd
     operar roturas de 1h en contra de la tendencia mayor. Cada vela de 1h
     usa la última vela HTF ya cerrada en ese momento (merge_asof hacia
     atrás), nunca una vela HTF futura.
+
+    require_volume_confirmation (opcional, default False): exige que el
+    volumen de la vela de rotura supere VOLUME_CONFIRM_MULT veces su media
+    de VOLUME_MA_PERIOD velas — una rotura sin volumen por encima de lo
+    normal es más sospechosa de ser falsa.
     """
     df = compute_indicators(df)
 
@@ -100,6 +121,11 @@ def generate_signals(df: pd.DataFrame, htf_df: pd.DataFrame | None = None) -> pd
 
     long_signal = trend_up & breakout_up & rsi_confirms_long
     short_signal = trend_down & breakout_down & rsi_confirms_short
+
+    if require_volume_confirmation:
+        volume_confirms = df["Volume"] > df["volume_ma"] * VOLUME_CONFIRM_MULT
+        long_signal = long_signal & volume_confirms
+        short_signal = short_signal & volume_confirms
 
     if htf_df is not None and not htf_df.empty:
         htf_trend = compute_htf_trend(htf_df)
