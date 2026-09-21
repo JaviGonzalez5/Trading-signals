@@ -38,6 +38,14 @@ HTF_INTERVAL_BY_SYMBOL = {"ETH": "1h", "XAUUSD": "4h"}
 # drawdown a cambio de menos operaciones, así que se dejan sin ella.
 VOLUME_CONFIRM_ASSETS = {"ETH"}
 
+# Ratio SL/TP por activo (múltiplos de ATR) — solo XAUUSD mejora en las
+# tres métricas a la vez con un SL/TP más ancho (scripts/backtest_slt_tp_ratio.py:
+# win rate 49.6%->55.9%, retorno 35.68%->37.0%, drawdown -7.67%->-5.5%).
+# En BTC sube el win rate y baja el drawdown pero el retorno cae bastante
+# (37.35%->26.0%) — no pasa el listón de "mejora en todo", se deja el
+# ratio por defecto ahí. None = usa SL_ATR_MULT/TP_ATR_MULT de siempre.
+SL_TP_OVERRIDE_BY_SYMBOL = {"XAUUSD": (2.0, 3.0)}
+
 
 def format_signal_message(symbol: str, direction: str, entry: float, sl: float, tp: float, size) -> str:
     emoji = "🟢 COMPRA" if direction == "LONG" else "🔴 VENTA"
@@ -77,8 +85,10 @@ def process_asset(client, asset: dict) -> None:
             # generar señales por un fallo puntual de Kraken.
             log.warning("No se pudo descargar el marco temporal superior de %s: %s — sin filtro HTF este ciclo.", symbol, e)
 
+    sl_mult, tp_mult = SL_TP_OVERRIDE_BY_SYMBOL.get(symbol, (None, None))
     df = generate_signals(
         df, htf_df=htf_df, require_volume_confirmation=symbol in VOLUME_CONFIRM_ASSETS,
+        sl_atr_mult=sl_mult, tp_atr_mult=tp_mult,
     )
     last = df.iloc[-1]
     if last["signal"] == 0:

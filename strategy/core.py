@@ -134,6 +134,8 @@ def generate_signals(
     allow_long: bool = True,
     allow_short: bool = True,
     exclude_gold_market_closed: bool = False,
+    sl_atr_mult: float | None = None,
+    tp_atr_mult: float | None = None,
 ) -> pd.DataFrame:
     """
     Genera columna 'signal': 1 = compra, -1 = venta, 0 = sin señal.
@@ -166,6 +168,10 @@ def generate_signals(
     exclude_gold_market_closed (opcional, default False): excluye
     entradas en las horas en que el mercado REAL del oro está cerrado
     (ver gold_market_open) — solo tiene sentido para el proxy PAXG.
+
+    sl_atr_mult / tp_atr_mult (opcional): sobrescribe SL_ATR_MULT /
+    TP_ATR_MULT solo para esta llamada — permite un ratio riesgo:beneficio
+    distinto por activo sin tocar el valor global que comparten los demás.
     """
     df = compute_indicators(df)
 
@@ -231,10 +237,13 @@ def generate_signals(
     df["sl"] = np.nan
     df["tp"] = np.nan
 
-    df.loc[long_signal, "sl"] = df["Close"] - SL_ATR_MULT * df["atr"]
-    df.loc[long_signal, "tp"] = df["Close"] + TP_ATR_MULT * df["atr"]
-    df.loc[short_signal, "sl"] = df["Close"] + SL_ATR_MULT * df["atr"]
-    df.loc[short_signal, "tp"] = df["Close"] - TP_ATR_MULT * df["atr"]
+    effective_sl_mult = SL_ATR_MULT if sl_atr_mult is None else sl_atr_mult
+    effective_tp_mult = TP_ATR_MULT if tp_atr_mult is None else tp_atr_mult
+
+    df.loc[long_signal, "sl"] = df["Close"] - effective_sl_mult * df["atr"]
+    df.loc[long_signal, "tp"] = df["Close"] + effective_tp_mult * df["atr"]
+    df.loc[short_signal, "sl"] = df["Close"] + effective_sl_mult * df["atr"]
+    df.loc[short_signal, "tp"] = df["Close"] - effective_tp_mult * df["atr"]
 
     return df
 
