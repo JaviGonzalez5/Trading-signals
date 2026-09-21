@@ -40,6 +40,23 @@ export type Signal = {
 
 export type SignalWithAsset = Signal & { asset_symbol: string };
 
+export type DailyReview = {
+  id: string;
+  review_date: string;
+  signal_ids: string[];
+  narrative: string;
+  created_at: string;
+};
+
+export type FundamentalAnalysis = {
+  id: string;
+  asset_id: string;
+  analysis_date: string;
+  sentiment: "ALCISTA" | "BAJISTA" | "NEUTRAL" | null;
+  narrative: string;
+  created_at: string;
+};
+
 export async function getAssets(): Promise<Asset[]> {
   const supabase = getServerSupabase();
   const { data, error } = await supabase.from("assets").select("*").order("symbol");
@@ -83,6 +100,34 @@ export async function getAllResolvedSignals(): Promise<SignalWithAsset[]> {
     const { assets, ...signal } = row as Signal & { assets: { symbol: string } | null };
     return { ...signal, asset_symbol: assets?.symbol ?? "?" };
   });
+}
+
+/** Revisiones narradas (última primero) — explican lo ya pasado, nunca
+ * proponen operaciones nuevas (ver worker/daily_review.py). */
+export async function getDailyReviews(limit = 14): Promise<DailyReview[]> {
+  const supabase = getServerSupabase();
+  const { data, error } = await supabase
+    .from("daily_reviews")
+    .select("*")
+    .order("review_date", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Últimos análisis fundamentales de un activo (más reciente primero) —
+ * lectura de sentimiento vía búsqueda web, nunca propone una operación
+ * (ver worker/fundamental_analysis.py). */
+export async function getFundamentalAnalyses(assetId: string, limit = 7): Promise<FundamentalAnalysis[]> {
+  const supabase = getServerSupabase();
+  const { data, error } = await supabase
+    .from("fundamental_analyses")
+    .select("*")
+    .eq("asset_id", assetId)
+    .order("analysis_date", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data ?? [];
 }
 
 /** Nº de señales ACTIVE por asset_id, para pintar el badge en el listado. */

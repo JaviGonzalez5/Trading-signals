@@ -10,8 +10,9 @@ worker 24/7), no como bucle.
 """
 
 import logging
+from datetime import datetime, timezone
 
-from worker import db
+from worker import daily_review, db, fundamental_analysis
 from worker.data_sources import fetch_candles_since
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -79,6 +80,7 @@ def run() -> None:
 
     assets_cache: dict[str, dict | None] = {}
     resolved = 0
+    resolved_today: list[dict] = []
 
     for signal in active_signals:
         asset_id = signal["asset_id"]
@@ -120,12 +122,41 @@ def run() -> None:
             mfe_r=result["mfe_r"],
         )
         resolved += 1
+        resolved_today.append({
+            **signal,
+            "status": result["status"],
+            "exit_price": exit_price,
+            "r_multiple": round(r_mult, 3),
+            "mae_r": result["mae_r"],
+            "mfe_r": result["mfe_r"],
+        })
         log.info(
             "Señal %s (%s) resuelta: %s @ %s (R=%.2f)",
             signal["id"], asset["symbol"], result["status"], exit_price, r_mult,
         )
 
     log.info("Revisión completa. %d señal(es) resuelta(s) de %d activas.", resolved, len(active_signals))
+
+    if resolved_today and daily_review.is_configured():
+        asset_symbols = {aid: a["symbol"] for aid, a in assets_cache.items() if a is not None}
+        narrative = daily_review.generate_daily_review(resolved_today, asset_symbols)
+        if narrative:
+            today_iso = datetime.now(timezone.utc).date().isoformat()
+            db.save_daily_review(client, today_iso, [t["id"] for t in resolved_today], narrative)
+            log.info("Revisión narrada del %s guardada (%d trades).", today_iso, len(resolved_today))
+
+    if fundamental_analysis.is_configured():
+        today_iso = datetime.now(timezone.utc).date().isoformat()
+        for asset in db.get_active_assets(client):
+            result = fundamental_analysis.analyze_asset(asset["symbol"], asset["name"])
+            if result:
+                db.save_fundamental_analysis(
+                    client, asset["id"], today_iso, result["sentiment"], result["narrative"]
+                )
+                log.info(
+                    "Análisis fundamental de %s guardado (sesgo: %s).",
+                    asset["symbol"], result["sentiment"],
+                )
 
 
 if __name__ == "__main__":

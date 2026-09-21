@@ -58,6 +58,15 @@ Ver `PROMPT_CLAUDE_CODE.md` para el plan completo por pasos.
   - Server Components leen Supabase directamente con la service_role key
     (`web/lib/supabase-server.ts`, variables de entorno server-only, nunca
     `NEXT_PUBLIC_` — la clave no llega al navegador).
+  - Revisión narrada diaria (`worker/daily_review.py`, tabla `daily_reviews`)
+    y análisis fundamental por activo (`worker/fundamental_analysis.py`,
+    tabla `fundamental_analyses`) — ambos vía API de Claude
+    (`claude-sonnet-5`), el segundo con el server tool `web_search`.
+    **Ninguno de los dos propone una operación** — solo explican lo ya
+    pasado o el sesgo de mercado encontrado en noticias. El motor de
+    señales (`strategy/core.py`) sigue siendo el único que genera entradas
+    reales. Requiere `ANTHROPIC_API_KEY` en Railway; sin ella, se omiten
+    sin más (el resto del sistema sigue funcionando).
 
 ### Decisión de diseño: sugerencias, no auto-ajuste autónomo
 

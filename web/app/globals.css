@@ -228,6 +228,85 @@ th {
   padding: 16px 0;
 }
 
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.review-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--blue);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.review-date {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: capitalize;
+  margin-bottom: 8px;
+}
+
+.review-narrative {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.fundamental-card {
+  background: var(--panel);
+  border: 1px solid var(--yellow);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.fundamental-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fundamental-date {
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: auto;
+}
+
+.sentiment-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.sentiment-up {
+  color: var(--green);
+}
+.sentiment-up.sentiment-dot {
+  background: var(--green);
+}
+
+.sentiment-down {
+  color: var(--red);
+}
+.sentiment-down.sentiment-dot {
+  background: var(--red);
+}
+
+.sentiment-neutral {
+  color: var(--muted);
+}
+.sentiment-neutral.sentiment-dot {
+  background: var(--muted);
+}
+
 .suggestions-list {
   display: flex;
   flex-direction: column;

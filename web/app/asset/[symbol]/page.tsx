@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getAssetBySymbol, getSignalsForAsset, type Signal } from "@/lib/data";
+import { getAssetBySymbol, getSignalsForAsset, getFundamentalAnalyses, type Signal } from "@/lib/data";
 import { summarize, equityCurve } from "@/lib/stats";
 import { fetchKrakenCandles } from "@/lib/kraken";
 import PriceChart from "@/components/PriceChart";
@@ -20,6 +20,25 @@ function fmtDate(iso: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function fmtDay(isoDate: string) {
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function sentimentLabel(sentiment: "ALCISTA" | "BAJISTA" | "NEUTRAL" | null) {
+  switch (sentiment) {
+    case "ALCISTA":
+      return { text: "Alcista", cls: "sentiment-up" };
+    case "BAJISTA":
+      return { text: "Bajista", cls: "sentiment-down" };
+    default:
+      return { text: "Neutral", cls: "sentiment-neutral" };
+  }
 }
 
 function statusLabel(status: Signal["status"]) {
@@ -85,11 +104,15 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
   const asset = await getAssetBySymbol(symbol);
   if (!asset) notFound();
 
-  const signals = await getSignalsForAsset(asset.id);
+  const [signals, fundamentalAnalyses] = await Promise.all([
+    getSignalsForAsset(asset.id),
+    getFundamentalAnalyses(asset.id),
+  ]);
   const active = signals.filter((s) => s.status === "ACTIVE");
   const historic = signals.filter((s) => s.status !== "ACTIVE");
   const stats = summarize(signals);
   const curve = equityCurve(signals);
+  const latestFundamental = fundamentalAnalyses[0] ?? null;
 
   let candles: Awaited<ReturnType<typeof fetchKrakenCandles>> = [];
   if (asset.data_source === "kraken") {
@@ -110,6 +133,22 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
         <h1>{asset.symbol}</h1>
         <p style={{ color: "var(--muted)" }}>{asset.name}</p>
       </div>
+
+      {latestFundamental && (
+        <section>
+          <h2>Análisis fundamental</h2>
+          <div className="fundamental-card">
+            <div className="fundamental-header">
+              <span className={`sentiment-dot ${sentimentLabel(latestFundamental.sentiment).cls}`} />
+              <span className={sentimentLabel(latestFundamental.sentiment).cls}>
+                {sentimentLabel(latestFundamental.sentiment).text}
+              </span>
+              <span className="fundamental-date">{fmtDay(latestFundamental.analysis_date)}</span>
+            </div>
+            <p className="review-narrative">{latestFundamental.narrative}</p>
+          </div>
+        </section>
+      )}
 
       <section>
         <h2>Estadísticas (señales resueltas)</h2>

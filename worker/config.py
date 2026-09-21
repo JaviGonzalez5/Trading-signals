@@ -14,3 +14,7 @@ POLL_INTERVAL_MINUTES = int(os.environ.get("POLL_INTERVAL_MINUTES", "15"))
 # pero no calcula tamaño de posición (nunca se inventa un capital).
 DEFAULT_CAPITAL = float(os.environ.get("DEFAULT_CAPITAL", "0") or 0)
 DEFAULT_RISK_PCT = float(os.environ.get("DEFAULT_RISK_PCT", "1.0"))
+
+# Sin esto, el cron de revisión sigue resolviendo señales igual — solo se
+# omite la narrativa diaria (ver worker/daily_review.py).
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")

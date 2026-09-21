@@ -1,4 +1,4 @@
-import { getAllResolvedSignals } from "@/lib/data";
+import { getAllResolvedSignals, getDailyReviews } from "@/lib/data";
 import { buildSuggestions } from "@/lib/suggestions";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +18,16 @@ function fmtDate(iso: string | null) {
   });
 }
 
+function fmtDay(isoDate: string) {
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("es-ES", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  });
+}
+
 export default async function TradesPage() {
-  const signals = await getAllResolvedSignals();
+  const [signals, reviews] = await Promise.all([getAllResolvedSignals(), getDailyReviews()]);
   const suggestions = buildSuggestions(signals);
 
   return (
@@ -34,6 +42,25 @@ export default async function TradesPage() {
           sistema automático.
         </p>
       </div>
+
+      <section>
+        <h2>Revisión narrada</h2>
+        {reviews.length === 0 ? (
+          <p className="empty-state">
+            Todavía no hay ninguna revisión narrada — se genera automáticamente el día que se resuelva al menos
+            una señal (requiere <code>ANTHROPIC_API_KEY</code> configurada en Railway).
+          </p>
+        ) : (
+          <div className="reviews-list">
+            {reviews.map((r) => (
+              <div key={r.id} className="review-card">
+                <div className="review-date">{fmtDay(r.review_date)}</div>
+                <p className="review-narrative">{r.narrative}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section>
         <h2>Sugerencias</h2>

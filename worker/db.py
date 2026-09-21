@@ -69,3 +69,28 @@ def close_signal(
         "mae_r": mae_r,
         "mfe_r": mfe_r,
     }).eq("id", signal_id).execute()
+
+
+def save_daily_review(client: Client, review_date_iso: str, signal_ids: list[str], narrative: str) -> None:
+    """Upsert por review_date: si el cron se reintenta el mismo día, se
+    sobrescribe en vez de duplicar (unique constraint en review_date)."""
+    client.table("daily_reviews").upsert(
+        {"review_date": review_date_iso, "signal_ids": signal_ids, "narrative": narrative},
+        on_conflict="review_date",
+    ).execute()
+
+
+def save_fundamental_analysis(
+    client: Client, asset_id: str, analysis_date_iso: str, sentiment: str | None, narrative: str
+) -> None:
+    """Upsert por (asset_id, analysis_date): si el cron se reintenta el
+    mismo día para el mismo activo, se sobrescribe en vez de duplicar."""
+    client.table("fundamental_analyses").upsert(
+        {
+            "asset_id": asset_id,
+            "analysis_date": analysis_date_iso,
+            "sentiment": sentiment,
+            "narrative": narrative,
+        },
+        on_conflict="asset_id,analysis_date",
+    ).execute()
