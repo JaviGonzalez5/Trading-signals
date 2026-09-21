@@ -32,6 +32,12 @@ HTF_FILTER_ASSETS = {"ETH", "XAUUSD"}
 # 1h, no 4h (un escalón por encima de su nueva entrada, no dos).
 HTF_INTERVAL_BY_SYMBOL = {"ETH": "1h", "XAUUSD": "4h"}
 
+# Confirmación por volumen (ver strategy/core.py::generate_signals) — solo
+# ETH mejora con ella (scripts/backtest_volume_filter.py: retorno 26.04% ->
+# 27.46%, drawdown -13.66% -> -12.66%). En BTC y XAUUSD empeora el
+# drawdown a cambio de menos operaciones, así que se dejan sin ella.
+VOLUME_CONFIRM_ASSETS = {"ETH"}
+
 
 def format_signal_message(symbol: str, direction: str, entry: float, sl: float, tp: float, size) -> str:
     emoji = "🟢 COMPRA" if direction == "LONG" else "🔴 VENTA"
@@ -71,7 +77,9 @@ def process_asset(client, asset: dict) -> None:
             # generar señales por un fallo puntual de Kraken.
             log.warning("No se pudo descargar el marco temporal superior de %s: %s — sin filtro HTF este ciclo.", symbol, e)
 
-    df = generate_signals(df, htf_df=htf_df)
+    df = generate_signals(
+        df, htf_df=htf_df, require_volume_confirmation=symbol in VOLUME_CONFIRM_ASSETS,
+    )
     last = df.iloc[-1]
     if last["signal"] == 0:
         return
