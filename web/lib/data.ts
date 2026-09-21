@@ -27,7 +27,18 @@ export type Signal = {
   signal_ts: string;
   closed_at: string | null;
   created_at: string;
+  // Contexto de la estrategia en el momento de la señal (worker/main.py) y
+  // excursión durante el trade (worker/check_results.py) — para el diario
+  // de trades y el motor de sugerencias, no solo el resultado final.
+  rsi_at_signal: number | null;
+  atr_at_signal: number | null;
+  ema_fast: number | null;
+  ema_slow: number | null;
+  mae_r: number | null;
+  mfe_r: number | null;
 };
+
+export type SignalWithAsset = Signal & { asset_symbol: string };
 
 export async function getAssets(): Promise<Asset[]> {
   const supabase = getServerSupabase();
@@ -56,6 +67,22 @@ export async function getSignalsForAsset(assetId: string): Promise<Signal[]> {
     .order("signal_ts", { ascending: false });
   if (error) throw error;
   return data ?? [];
+}
+
+/** Todas las señales resueltas (cualquier activo), para el diario de
+ * trades y el motor de sugerencias — ordenadas más reciente primero. */
+export async function getAllResolvedSignals(): Promise<SignalWithAsset[]> {
+  const supabase = getServerSupabase();
+  const { data, error } = await supabase
+    .from("signals")
+    .select("*, assets(symbol)")
+    .in("status", ["HIT_TP", "HIT_SL"])
+    .order("closed_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => {
+    const { assets, ...signal } = row as Signal & { assets: { symbol: string } | null };
+    return { ...signal, asset_symbol: assets?.symbol ?? "?" };
+  });
 }
 
 /** Nº de señales ACTIVE por asset_id, para pintar el badge en el listado. */

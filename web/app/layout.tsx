@@ -14,6 +14,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <a href="/" className="brand">
             📈 Señales Trading
           </a>
+          <a href="/trades" className="nav-link">
+            Diario de trades
+          </a>
         </header>
         <main>{children}</main>
       </body>

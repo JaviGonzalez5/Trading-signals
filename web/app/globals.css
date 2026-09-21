@@ -24,6 +24,9 @@ body {
 .site-header {
   padding: 16px 24px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .brand {
@@ -31,6 +34,16 @@ body {
   text-decoration: none;
   font-weight: 700;
   font-size: 18px;
+}
+
+.nav-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.nav-link:hover {
+  color: var(--text);
 }
 
 main {
@@ -213,4 +226,34 @@ th {
   color: var(--muted);
   font-size: 14px;
   padding: 16px 0;
+}
+
+.suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.suggestion-card {
+  background: var(--panel);
+  border: 1px solid var(--yellow);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.suggestion-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.suggestion-detail {
+  color: var(--text);
+  font-size: 14px;
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.suggestion-meta {
+  color: var(--muted);
+  font-size: 12px;
 }

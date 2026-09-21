@@ -76,6 +76,13 @@ def process_asset(client, asset: dict) -> None:
         "capital_snapshot": config.DEFAULT_CAPITAL or None,
         "position_size": size,
         "signal_ts": signal_ts_iso,
+        # Contexto de la estrategia en el momento de la señal — para poder
+        # analizar después qué patrones fallan (ver worker/check_results.py
+        # y la página /trades de la web), no solo si ganó o perdió.
+        "rsi_at_signal": float(last["rsi"]) if last["rsi"] == last["rsi"] else None,  # NaN != NaN
+        "atr_at_signal": float(last["atr"]) if last["atr"] == last["atr"] else None,
+        "ema_fast": float(last["ema_fast"]) if last["ema_fast"] == last["ema_fast"] else None,
+        "ema_slow": float(last["ema_slow"]) if last["ema_slow"] == last["ema_slow"] else None,
     }
 
     try:

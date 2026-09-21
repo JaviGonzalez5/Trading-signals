@@ -58,10 +58,14 @@ def close_signal(
     exit_price: float,
     r_multiple: float,
     closed_at_iso: str,
+    mae_r: float | None = None,
+    mfe_r: float | None = None,
 ) -> None:
     client.table("signals").update({
         "status": status,
         "exit_price": exit_price,
         "r_multiple": r_multiple,
         "closed_at": closed_at_iso,
+        "mae_r": mae_r,
+        "mfe_r": mfe_r,
     }).eq("id", signal_id).execute()

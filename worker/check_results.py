@@ -21,25 +21,47 @@ log = logging.getLogger("worker.check_results")
 def evaluate_signal(signal: dict, df) -> dict | None:
     """Recorre las velas posteriores a la señal en orden y devuelve el
     resultado (HIT_SL/HIT_TP + precio de salida + fecha) en cuanto se toca
-    alguno de los dos, o None si aún sigue sin resolverse."""
+    alguno de los dos, o None si aún sigue sin resolverse.
+
+    De paso mide mae_r/mfe_r (excursión máxima en contra/a favor, en
+    múltiplos de riesgo) hasta el momento de resolverse — así una señal que
+    ganó pero estuvo a punto de saltar el stop se distingue de una que ganó
+    sin sobresaltos, algo que "ganó/perdió" por sí solo no cuenta."""
     direction = signal["direction"]
     sl = float(signal["stop_loss"])
     tp = float(signal["take_profit"])
+    entry = float(signal["entry_price"])
+    sl_distance = abs(entry - sl) or 1e-9
+
+    def r_of(price: float) -> float:
+        if direction == "LONG":
+            return (price - entry) / sl_distance
+        return (entry - price) / sl_distance
+
+    mfe = 0.0
+    mae = 0.0
 
     for ts, row in df.iterrows():
         if direction == "LONG":
             hit_sl = row["Low"] <= sl
             hit_tp = row["High"] >= tp
+            favorable_r = r_of(row["High"])
+            adverse_r = r_of(row["Low"])
         else:
             hit_sl = row["High"] >= sl
             hit_tp = row["Low"] <= tp
+            favorable_r = r_of(row["Low"])
+            adverse_r = r_of(row["High"])
+
+        mfe = max(mfe, favorable_r)
+        mae = min(mae, adverse_r)
 
         # Si toca los dos en la misma vela, asumimos el peor caso (SL) por
         # prudencia — mismo criterio que el backtest.
         if hit_sl:
-            return {"status": "HIT_SL", "exit_price": sl, "closed_at": ts}
+            return {"status": "HIT_SL", "exit_price": sl, "closed_at": ts, "mfe_r": round(mfe, 3), "mae_r": round(mae, 3)}
         if hit_tp:
-            return {"status": "HIT_TP", "exit_price": tp, "closed_at": ts}
+            return {"status": "HIT_TP", "exit_price": tp, "closed_at": ts, "mfe_r": round(mfe, 3), "mae_r": round(mae, 3)}
 
     return None
 
@@ -94,6 +116,8 @@ def run() -> None:
             exit_price=exit_price,
             r_multiple=round(r_mult, 3),
             closed_at_iso=closed_at_iso,
+            mae_r=result["mae_r"],
+            mfe_r=result["mfe_r"],
         )
         resolved += 1
         log.info(
